@@ -1,10 +1,8 @@
 package APDU;
 
-import Applet.SimpleApplet;
+import Applet.SecretStorage;
 import com.licel.jcardsim.utils.AIDUtil;
 import javacard.framework.*;
-import javacard.security.*;
-import javacardx.crypto.*;
 
 import com.licel.jcardsim.smartcardio.CardSimulator;
 import javax.smartcardio.*;
@@ -24,7 +22,7 @@ public class Simulator {
     public Simulator() {
         simulator = new CardSimulator();
         AID applet = AIDUtil.create(APPLET_AID);
-        simulator.installApplet(applet, SimpleApplet.class);
+        //simulator.installApplet(applet, SecretStorage.class);
         simulator.selectApplet(applet);
     }
 

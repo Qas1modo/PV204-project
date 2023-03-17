@@ -11,8 +11,8 @@
 
   <target name="build" description="Builds the CAP file with SimpleApplet">
     <javacard jckit="${JC303}">
-      <cap output="upload/SimpleApplet.cap" sources="src/Applet/" aid="73696d706c65">
-        <applet class="Applet.SimpleApplet" aid="73696d706c656170706c6574"/>
+      <cap output="upload/SecretStorage.cap" sources="src/Applet/" aid="73696d706c65">
+        <applet class="Applet.SecretStorage" aid="73696d706c656170706c6574"/>
       </cap>
     </javacard>
   </target>
