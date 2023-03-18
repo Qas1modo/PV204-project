@@ -1,6 +1,5 @@
 package APDU;
 
-import Applet.SecretStorage;
 import com.licel.jcardsim.utils.AIDUtil;
 import javacard.framework.*;
 

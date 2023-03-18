@@ -1,4 +1,4 @@
-package Applet;
+package SecretApplet;
 
 import javacard.security.*;
 import javacardx.crypto.Cipher;

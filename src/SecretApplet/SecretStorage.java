@@ -1,9 +1,9 @@
-package Applet;
+package SecretApplet;
 
 import javacard.framework.*;
 import javacard.security.*;
 
-public class SecretStorage extends javacard.framework.Applet {
+public class SecretStorage extends Applet {
 
     //CONSTANTS
     private final short MAX_SECRET_NAME_LENGTH = 32;
@@ -67,6 +67,24 @@ public class SecretStorage extends javacard.framework.Applet {
         crypto = new Crypto();
         secretName = new byte[MAX_SECRET_NAME_LENGTH];
         secretValue = new byte[MAX_SECRET_VALUE_LENGTH];
+        register();
+    }
+
+    public boolean select() {
+        return clearSession();
+    }
+
+    public void deselect() {
+        clearSession();
+    }
+
+    private boolean clearSession(){
+        pin.reset();
+        puk.reset();
+        if (secureChannel != null) {
+            secureChannel.reset();
+        }
+        return true;
     }
 
     public void process(APDU apdu) throws ISOException {
@@ -77,11 +95,12 @@ public class SecretStorage extends javacard.framework.Applet {
             init(apdu);
             return;
         }
-        byte[] apduBuffer = apdu.getBuffer();
         if (selectingApplet()) {
             reselect(apdu);
             return;
         }
+        byte[] apduBuffer = apdu.getBuffer();
+        apdu.setIncomingAndReceive();
         try {
             if (apduBuffer[ISO7816.OFFSET_CLA] == CLA_SIMPLEAPPLET) {
                 switch (apduBuffer[ISO7816.OFFSET_INS]) {
@@ -174,18 +193,6 @@ public class SecretStorage extends javacard.framework.Applet {
         }
         ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
     }
-    public void deselect() {
-        pin.reset();
-        puk.reset();
-        secureChannel.reset();
-    }
-
-    public boolean select() {
-        pin.reset();
-        puk.reset();
-        secureChannel.reset();
-        return true;
-    }
 
     public void reselect(APDU apdu) {
         pin.reset();
@@ -198,7 +205,6 @@ public class SecretStorage extends javacard.framework.Applet {
 
     private void verifyPIN(byte[] apduBuffer) {
         byte len = (byte) secureChannel.processAPDU(apduBuffer);
-
         if (len != PIN_LENGTH || !allDigits(apduBuffer, ISO7816.OFFSET_CDATA, len)) {
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
         }

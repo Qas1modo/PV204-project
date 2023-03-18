@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project basedir="." default="build" name="JavaCard">
+  <property name="JC222" value="lib/java_card_kit-2_2_2"/>
+  <property name="JC303" value="lib/java_card_kit-3_0_3"/>
+  <property name="GP211" value="lib/globalplatform-2_1_1"/>
+
+  <taskdef name="javacard" classname="pro.javacard.ant.JavaCard" classpath="lib/ant-javacard.jar"/>
+  <target name="build" description="Builds the CAP file with SecureStorageApplet">
+    <javacard jckit="${JC303}">
+      <cap output="upload/SecretStorage.cap" sources="src/SecretApplet/" aid="73696d706c65">
+        <applet class="SecretApplet.SecretStorage" aid="73696d706c656170706c6574"/>
+      </cap>
+    </javacard>
+  </target>
+</project>

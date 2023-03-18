@@ -1,4 +1,4 @@
-package Applet;
+package SecretApplet;
 
 import javacard.security.ECKey;
 import javacard.security.ECPrivateKey;
