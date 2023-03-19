@@ -41,9 +41,9 @@ public class SecretStorageAPDU {
     public final UserInterface ui;
 
     //Data arrays
-    private byte[] secret_IV; //array containing initialization secret and IV
-    private byte[] challengeResponse;
-    private byte[] pairingSecret;
+    private final byte[] secret_IV; //array containing initialization secret and IV
+    private final byte[] challengeResponse;
+    private final byte[] pairingSecret;
 
     //Application State
     private boolean scOpened = false;
@@ -187,7 +187,7 @@ public class SecretStorageAPDU {
             byte[] puk = ui.getPuk(false);
             System.out.println("Enter new PIN:");
             byte[] pin = ui.getPin(false);
-            request = Arrays.copyOf(puk,  puk.length + pin.length);;
+            request = Arrays.copyOf(puk,  puk.length + pin.length);
             System.arraycopy(pin, 0, request, puk.length, pin.length);
             response = secureRespond(request, (short) request.length, INS_UNBLOCK_PIN,
                     (byte)0x00, (byte)0x00);
@@ -246,7 +246,7 @@ public class SecretStorageAPDU {
         CommandAPDU commandAPDU = new CommandAPDU(0x00, INS_VERIFY_KEYS, 0x01, 0x00, responseData,
                 (short) 0, length);
         response = Run.simulator.transmitCommand(commandAPDU);
-        if (!Arrays.equals(response.getData(), challenge)) {
+        if (!Arrays.equals(response.getData(), challengeResponse)) {
             reset();
             return false;
         }
