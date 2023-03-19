@@ -1,7 +1,6 @@
 package main;
 
 import javacard.framework.ISO7816;
-import javacard.framework.Util;
 import javacard.security.ECPublicKey;
 import javacard.security.Signature;
 import javacardx.crypto.Cipher;
@@ -266,7 +265,7 @@ public class SecretStorageAPDU {
         request[3] = P2;
         request[4] = (byte) (len + crypto.AES_BLOCK_SIZE);
         computeMAC(request, len);
-        Util.arrayCopyNonAtomic(request, ISO7816.OFFSET_CDATA, secret_IV, (short) 0, crypto.SC_BLOCK_SIZE);
+        System.arraycopy(request, ISO7816.OFFSET_CDATA, secret_IV, 0, crypto.SC_BLOCK_SIZE);
         CommandAPDU commandAPDU = new CommandAPDU(request, (short) 0, request.length);
         return Run.simulator.transmitCommand(commandAPDU);
     }
@@ -287,7 +286,7 @@ public class SecretStorageAPDU {
             throw new RuntimeException();
         }
         crypto.aes.init(crypto.scEncKey, Cipher.MODE_DECRYPT, secret_IV, (short) 0, crypto.SC_BLOCK_SIZE);
-        Util.arrayCopy(buffer, (short) 0, secret_IV, (short) 0, crypto.SC_BLOCK_SIZE);
+        System.arraycopy(buffer, 0, secret_IV, 0, crypto.SC_BLOCK_SIZE);
         return crypto.aes.doFinal(buffer, crypto.SC_BLOCK_SIZE,
                 (short) (apduLen - crypto.SC_BLOCK_SIZE) , buffer, (short) 0);
     }
@@ -322,8 +321,8 @@ public class SecretStorageAPDU {
         crypto.scEncKey.setKey(secret_IV, (short) 0);
         crypto.scMacKey.setKey(secret_IV, crypto.SC_SECRET_LENGTH);
         System.arraycopy(response, crypto.SC_SECRET_LENGTH, secret_IV, (short) 0, crypto.SC_BLOCK_SIZE);
-        Util.arrayFillNonAtomic(secret_IV, crypto.SC_BLOCK_SIZE,
-                (short) (2*crypto.SC_SECRET_LENGTH - crypto.SC_BLOCK_SIZE), (byte) 0); // fill zero
+        Arrays.fill(secret_IV, crypto.SC_BLOCK_SIZE,
+                2*crypto.SC_SECRET_LENGTH, (byte) 0); // fill zero
         scOpened = true;
     }
 

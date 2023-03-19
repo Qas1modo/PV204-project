@@ -60,6 +60,7 @@ public class UserInterface {
         System.out.println("Secure channel destroyed, proceeding to reinitialization!");
     }
 
+    //Add new methods here to call APDU operations
     private boolean callCommand(int input) throws NeedResetException {
         switch (input) {
             case 1:

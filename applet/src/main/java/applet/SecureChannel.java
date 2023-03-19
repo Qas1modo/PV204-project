@@ -128,6 +128,7 @@ public class SecureChannel {
         }
     }
 
+    //Use this method to get data from secure channel
     public short processAPDU(byte[] buffer) {
         if (!isOpen()) {
             ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
@@ -161,14 +162,14 @@ public class SecureChannel {
         return scEncKey.isInitialized() && scMacKey.isInitialized() && authenticated ;
     }
 
-    //
+    // Use this to send data over secure channel
     public void secureRespond(APDU apdu, byte[] apduBuffer, short len) {
-        byte[] antibug = new byte[len + SC_BLOCK_SIZE]; // prevent aes implementation bug
+        byte[] antiBug = new byte[len + SC_BLOCK_SIZE]; // prevent aes implementation bug - need fix before deployment
         crypto.aes.init(scEncKey, Cipher.MODE_ENCRYPT, secret_IV, (short) 0, SC_BLOCK_SIZE);
-        len = crypto.aes.doFinal(apduBuffer, (short) 0, len, antibug,  (short) 0);
-        computeMAC(len, apduBuffer, antibug);
+        len = crypto.aes.doFinal(apduBuffer, (short) 0, len, antiBug,  (short) 0);
+        computeMAC(len, apduBuffer, antiBug);
         Util.arrayCopyNonAtomic(apduBuffer, (short) 0, secret_IV, (short) 0, SC_BLOCK_SIZE);
-        Util.arrayCopyNonAtomic(antibug, (short) 0, apduBuffer, SC_BLOCK_SIZE, len);
+        Util.arrayCopyNonAtomic(antiBug, (short) 0, apduBuffer, SC_BLOCK_SIZE, len);
         len += SC_BLOCK_SIZE;
         apdu.setOutgoingAndSend((short) 0, len);
     }

@@ -1,10 +1,8 @@
 package main;
 
-import applet.SecretStorageApplet;
 import javacard.security.*;
 import javacardx.crypto.Cipher;
 import java.security.SecureRandom;
-import java.util.Arrays;
 
 public class Crypto {
     final public short AES_BLOCK_SIZE = 16;
