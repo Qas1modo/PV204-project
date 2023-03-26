@@ -3,8 +3,6 @@ package main;
 
 import javax.crypto.SecretKey;
 import java.security.SecureRandom;
-import java.sql.Array;
-import java.util.Arrays;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javacard.security.*;

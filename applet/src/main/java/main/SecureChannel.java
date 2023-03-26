@@ -170,14 +170,14 @@ public class SecureChannel {
     }
 
     public char getState() {
+        if (permanentlyBlocked) {
+            return '#';
+        }
         if (pinBlocked) {
             return '!';
         }
         if (pinVerified) {
             return 'V';
-        }
-        if (permanentlyBlocked) {
-            return '#';
         }
         return 'X';
     }
@@ -205,6 +205,9 @@ public class SecureChannel {
 
     public boolean isPinBlocked() {
         return pinBlocked;
+    }
+    public boolean isPermanentlyBlocked() {
+        return permanentlyBlocked;
     }
 
     public void pinVerified(boolean value) {

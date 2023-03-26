@@ -159,6 +159,10 @@ public class SecretStorageAPDU {
         if (!checkPrerequisites(true, false, true, false)) {
             return false;
         }
+        if (sc.isPermanentlyBlocked()) {
+            System.out.println("Card blocked!");
+            return false;
+        }
         byte[] request;
         ResponseAPDU response;
         int attemptsRemaining;
@@ -223,5 +227,4 @@ public class SecretStorageAPDU {
                 throw new RuntimeException();
         }
     }
-
 }
