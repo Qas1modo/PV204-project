@@ -140,8 +140,8 @@ public class SecureChannel {
         crypto.generateSecret(response, 1, secret_IV, 0);
         byte[] request_data = new byte[Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE + Const.INIT_AES_LEN];
         crypto.exportKey(request_data, 0);
-        System.arraycopy(UserInterface.getPin(true), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
-        System.arraycopy(UserInterface.getPuk(true), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
+        System.arraycopy(UserInterface.getPin(false), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
+        System.arraycopy(UserInterface.getPuk(false), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
         crypto.genBytes(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.update(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.digest(pairingSecret, 0, 32);
