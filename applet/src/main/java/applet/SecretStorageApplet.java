@@ -89,13 +89,13 @@ public class SecretStorageApplet extends Applet
 						secureChannel.verifyKeys(apdu);
 						break;
 					case INS_CHANGE_PIN:
-						changePIN(apduBuffer);
+						changePIN(apdu);
 						break;
 					case INS_UNBLOCK_PIN:
-						unblockPIN(apduBuffer);
+						unblockPIN(apdu);
 						break;
 					case INS_VERIFY_PIN:
-						verifyPIN(apduBuffer);
+						verifyPIN(apdu);
 						break;
 					case INS_STORE:
 						//storeData(apduBuffer);
@@ -186,7 +186,8 @@ public class SecretStorageApplet extends Applet
 		apdu.setOutgoingAndSend((short) 0, (short) 1);
 	}
 
-	private void verifyPIN(byte[] apduBuffer) {
+	private void verifyPIN(APDU apdu) {
+		byte[] apduBuffer = apdu.getBuffer();
 		byte len = (byte) secureChannel.processAPDU(apduBuffer);
 		if (len != PIN_LENGTH || !allDigits(apduBuffer, ISO7816.OFFSET_CDATA, len)) {
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
@@ -194,9 +195,12 @@ public class SecretStorageApplet extends Applet
 		if (!pin.check(apduBuffer, ISO7816.OFFSET_CDATA, len)) {
 			ISOException.throwIt((short)( 0x63c0 + pin.getTriesRemaining()));
 		}
+		apduBuffer[0] = 0x01;
+		secureChannel.secureRespond(apdu, apduBuffer, (short) 1);
 	}
 
-	private void unblockPIN(byte[] apduBuffer) {
+	private void unblockPIN(APDU apdu) {
+		byte[] apduBuffer = apdu.getBuffer();
 		byte len = (byte) secureChannel.processAPDU(apduBuffer);
 		if (pin.getTriesRemaining() != 0) {
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
@@ -210,6 +214,8 @@ public class SecretStorageApplet extends Applet
 		pin.update(apduBuffer, (short)(ISO7816.OFFSET_CDATA + PUK_LENGTH), PIN_LENGTH);
 		pin.check(apduBuffer, (short)(ISO7816.OFFSET_CDATA + PUK_LENGTH), PIN_LENGTH);
 		puk.reset();
+		apduBuffer[0] = 0x01;
+		secureChannel.secureRespond(apdu, apduBuffer, (short) 1);
 	}
 
 	public void status(APDU apdu) {
@@ -241,42 +247,58 @@ public class SecretStorageApplet extends Applet
 		secureChannel.reset();
 	}
 
-	private void changePIN(byte[] apduBuffer) {
+	private void changePIN(APDU apdu) {
+		byte[] apduBuffer = apdu.getBuffer();
 		byte len = (byte) secureChannel.processAPDU(apduBuffer);
+		boolean result = false;
 		if (!pin.isValidated()) {
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
 		}
 		switch (apduBuffer[ISO7816.OFFSET_P1]) {
 			case CHANGE_PIN:
-				changeUserPIN(apduBuffer, len);
+				result = changeUserPIN(apduBuffer, len);
 				break;
 			case CHANGE_PUK:
-				changePUK(apduBuffer, len);
+				result = changePUK(apduBuffer, len);
 				break;
 			case CHANGE_PAIRING_SECRET:
-				changePS(apduBuffer, len);
+				result = changePS(apduBuffer, len);
 				break;
 			default:
 				ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
 		}
+		if (result) {
+			apduBuffer[0] = 0x01;
+		}
+		secureChannel.secureRespond(apdu, apduBuffer, (short) 1);
+		if (apduBuffer[ISO7816.OFFSET_P1] == CHANGE_PAIRING_SECRET) {
+			secureChannel.reset();
+		}
 	}
 
-	private void changeUserPIN(byte[] apduBuffer, byte len) {
-		if (!(len == PIN_LENGTH && allDigits(apduBuffer, ISO7816.OFFSET_CDATA, len))) {
+	private boolean changeUserPIN(byte[] apduBuffer, byte len) {
+		if (!(len == 2*PIN_LENGTH && allDigits(apduBuffer, ISO7816.OFFSET_CDATA, len))) {
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
 		}
-		pin.update(apduBuffer, ISO7816.OFFSET_CDATA, len);
-		pin.check(apduBuffer, ISO7816.OFFSET_CDATA, len);
+		if (!pin.check(apduBuffer, ISO7816.OFFSET_CDATA, PIN_LENGTH)) {
+			ISOException.throwIt((short)( 0x63c0 + pin.getTriesRemaining()));
+		}
+		pin.update(apduBuffer, (short) (ISO7816.OFFSET_CDATA + PIN_LENGTH), PIN_LENGTH);
+		return pin.check(apduBuffer, (short) (ISO7816.OFFSET_CDATA + PIN_LENGTH), PIN_LENGTH);
 	}
 
-	private void changePUK(byte[] apduBuffer, byte len) {
-		if (!(len == PUK_LENGTH && allDigits(apduBuffer, ISO7816.OFFSET_CDATA, len))) {
+	private boolean changePUK(byte[] apduBuffer, byte len) {
+		if (!(len == (PUK_LENGTH + PIN_LENGTH) && allDigits(apduBuffer, ISO7816.OFFSET_CDATA, len))) {
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
 		}
-		puk.update(apduBuffer, ISO7816.OFFSET_CDATA, len);
+		if (!pin.check(apduBuffer, ISO7816.OFFSET_CDATA, PIN_LENGTH)) {
+			ISOException.throwIt((short)( 0x63c0 + pin.getTriesRemaining()));
+		}
+		puk.update(apduBuffer, (short) (ISO7816.OFFSET_CDATA + PIN_LENGTH), PUK_LENGTH);
+		return true;
 	}
 
-	private void changePS(byte[] apduBuffer, byte len) {
+	private boolean changePS(byte[] apduBuffer, byte len) {
 		if (len != SecureChannel.SC_SECRET_LENGTH + PIN_LENGTH) {
 			ISOException.throwIt(ISO7816.SW_WRONG_DATA);
 		}
@@ -284,7 +306,7 @@ public class SecretStorageApplet extends Applet
 			ISOException.throwIt((short)( 0x63c0 + pin.getTriesRemaining()));
 		}
 		secureChannel.updatePairingSecret(apduBuffer, (short) (ISO7816.OFFSET_CDATA + PIN_LENGTH));
-		secureChannel.reset();
+		return true;
 	}
 
 	private boolean allDigits(byte[] buffer, short offset, short length) {
