@@ -144,8 +144,8 @@ public class SecureChannel {
         if (mpk_len != pk_len) {
             throw new RuntimeException("Keys are different length");
         }
-        System.arraycopy(UserInterface.getPin(true), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
-        System.arraycopy(UserInterface.getPuk(true), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
+        System.arraycopy(UserInterface.getPin(false), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
+        System.arraycopy(UserInterface.getPuk(false), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
         crypto.genBytes(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.update(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.digest(pairingSecret, 0, 32);
