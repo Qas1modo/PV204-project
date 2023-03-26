@@ -7,18 +7,18 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javacard.security.*;
 import javax.crypto.Cipher;
+import java.security.MessageDigest;
 
 public class Crypto {
     private SecretKey scEncKey;
     public AESKey scMacKey;
-    public SecureRandom random;
-    public KeyAgreement ecdh;
-    public final java.security.MessageDigest sha256;
-    public final java.security.MessageDigest sha512;
-    public Cipher aes;
-    public Signature mac;
-    public byte[] pairingSecret;
-    public KeyPair scKeypair;
+    private final SecureRandom random;
+    private final KeyAgreement ecdh;
+    public final MessageDigest sha256;
+    public final MessageDigest sha512;
+    private final Cipher aes;
+    public final Signature mac;
+    private final KeyPair scKeypair;
 
     public Crypto() {
         try {
@@ -30,7 +30,6 @@ public class Crypto {
             mac = Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
             scMacKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
                     KeyBuilder.LENGTH_AES_256, false);
-            pairingSecret = new byte[Const.SC_SECRET_LENGTH];
             scKeypair = new KeyPair(KeyPair.ALG_EC_FP, Const.SC_KEY_LENGTH);
             scKeypair.genKeyPair();
         } catch (Exception e) {
@@ -38,8 +37,22 @@ public class Crypto {
         }
     }
 
-    public SecretKey getEncKey() {
-        return scEncKey;
+    public int exportKey(byte[] buffer, int off) {
+        ECPublicKey pk = (ECPublicKey) scKeypair.getPublic();
+        short length = pk.getW(buffer, (short) off);
+        if (length != Const.EC_KEY_LEN) {
+            throw new RuntimeException("Keys are different length");
+        }
+        return length;
+    }
+
+    public int generateSecret(byte[] input, int off, byte[] output, int outOff) {
+        ecdh.init(scKeypair.getPrivate());
+        return ecdh.generateSecret(input, (short) off, Const.EC_KEY_LEN, output, (short) outOff);
+    }
+
+    public void genKeyPair(){
+        scKeypair.genKeyPair();
     }
 
     public void setEncKey(byte[] key, int off) {

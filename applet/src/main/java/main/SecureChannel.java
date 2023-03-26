@@ -1,7 +1,6 @@
 package main;
 
 import javacard.framework.ISO7816;
-import javacard.security.ECPublicKey;
 import javacard.security.Signature;
 
 import javax.smartcardio.CommandAPDU;
@@ -33,7 +32,7 @@ public class SecureChannel {
 
     public boolean verifySc() {
         byte[] challenge = new byte[Const.SC_SECRET_LENGTH];
-        crypto.random.nextBytes(challenge);
+        crypto.genBytes(challenge, 0, Const.SC_SECRET_LENGTH);
         System.arraycopy(challenge, 0, challengeResponse, 0, Const.SC_SECRET_LENGTH);
         ResponseAPDU response = secureRespond(challenge, (short) challenge.length, Const.INS_VERIFY_KEYS,
                 (byte)0x00, (byte)0x00);
@@ -112,19 +111,15 @@ public class SecureChannel {
 
     public void openSc() throws DigestException {
         byte[] request_data = new byte[Const.EC_KEY_LEN];
-        crypto.scKeypair.genKeyPair();
-        crypto.ecdh.init(crypto.scKeypair.getPrivate());
-        ECPublicKey pk = (ECPublicKey) crypto.scKeypair.getPublic();
-        short length = pk.getW(request_data, (short) 0);
-        if (length != Const.EC_KEY_LEN) {
-            throw new RuntimeException("Keys are different length");
-        }
+        crypto.genKeyPair();
+        crypto.exportKey(request_data, 0);
         CommandAPDU commandAPDU = new CommandAPDU(0x00, Const.INS_OPEN_SC, 0x00, 0x00, request_data);
         ResponseAPDU responseAPDU = Run.simulator.transmitCommand(commandAPDU);
         byte[] response = responseAPDU.getData();
+        int length;
         try {
-            length = crypto.ecdh.generateSecret(response, (short) (Const.AES_BLOCK_SIZE + Const.SC_SECRET_LENGTH),
-                    Const.EC_KEY_LEN, secret_IV, (short) 0);
+            length = crypto.generateSecret(response, Const.AES_BLOCK_SIZE + Const.SC_SECRET_LENGTH, secret_IV,
+                    0);
         } catch (Exception e){
             throw new RuntimeException();
         }
@@ -142,29 +137,18 @@ public class SecureChannel {
 
     public ResponseAPDU initialize(byte[] response) throws Exception {
         byte[] data_to_encrypt = new byte[Const.INIT_ENC_LEN];
-        crypto.ecdh.init(crypto.scKeypair.getPrivate());
-        short pk_len = (short) (response.length - 3);
-        try {
-            crypto.ecdh.generateSecret(response, (short) 1, pk_len, secret_IV, (short) 0);
-        } catch (Exception e) {
-            System.out.println("Invalid PK received");
-            return null;
-        }
-        ECPublicKey pk = (ECPublicKey) crypto.scKeypair.getPublic();
-        byte[] request_data = new byte[pk_len + Const.AES_BLOCK_SIZE + Const.INIT_AES_LEN];
-        short mpk_len = pk.getW(request_data, (short) 0);
-        if (mpk_len != pk_len) {
-            throw new RuntimeException("Keys are different length");
-        }
-        System.arraycopy(UserInterface.getPin(false), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
-        System.arraycopy(UserInterface.getPuk(false), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
+        crypto.generateSecret(response, 1, secret_IV, 0);
+        byte[] request_data = new byte[Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE + Const.INIT_AES_LEN];
+        crypto.exportKey(request_data, 0);
+        System.arraycopy(UserInterface.getPin(true), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
+        System.arraycopy(UserInterface.getPuk(true), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
         crypto.genBytes(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.update(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.digest(pairingSecret, 0, 32);
-        crypto.genBytes(request_data, pk_len, Const.AES_BLOCK_SIZE);
+        crypto.genBytes(request_data, Const.EC_KEY_LEN, Const.AES_BLOCK_SIZE);
         crypto.setEncKey(secret_IV, (short) 0);
-        crypto.encrypt(data_to_encrypt, 0, Const.INIT_ENC_LEN, request_data, pk_len + Const.AES_BLOCK_SIZE,
-                request_data, pk_len);
+        crypto.encrypt(data_to_encrypt, 0, Const.INIT_ENC_LEN, request_data,
+                Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE, request_data, Const.EC_KEY_LEN);
         CommandAPDU commandAPDU = new CommandAPDU(0x00, Const.INS_INIT, 0x00, 0x00, request_data);
         return Run.simulator.transmitCommand(commandAPDU);
     }
