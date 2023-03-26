@@ -1,7 +1,6 @@
 package main;
 
 import javax.smartcardio.ResponseAPDU;
-import java.security.DigestException;
 import java.util.Arrays;
 
 public class SecretStorageAPDU {
@@ -183,7 +182,7 @@ public class SecretStorageAPDU {
             }
         } while (response.getSW1() != 0x90);
         data = response.getData();
-        short len = sc.verifyAndDecrypt(data);
+        int len = sc.verifyAndDecrypt(data);
         if (data[0] == 0x01 && len == 1) {
             System.out.println("PIN changed");
             sc.pinBlocked(false);
@@ -209,7 +208,7 @@ public class SecretStorageAPDU {
        return true;
     }
 
-    public void selectApp() throws DigestException {
+    public void selectApp() throws Exception {
         sc.reset();
         byte[] select_response = Run.simulator.selectAppletWithResult(Run.appletAID);
         switch (select_response[0]){

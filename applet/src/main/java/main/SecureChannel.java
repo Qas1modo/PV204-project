@@ -3,7 +3,6 @@ package main;
 import javacard.framework.ISO7816;
 import javacard.security.ECPublicKey;
 import javacard.security.Signature;
-import javacardx.crypto.Cipher;
 
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
@@ -56,40 +55,53 @@ public class SecureChannel {
 
     //USE THIS TO RESPOND BY SECURE CHANNEL
     public ResponseAPDU secureRespond(byte[] input, short len, byte instruction, byte P1, byte P2) {
-        short cipher_len = (short) (((len + 1) / Const.AES_BLOCK_SIZE + 1) * Const.AES_BLOCK_SIZE);
+        int cipher_len = (short) (((len + 1) / Const.AES_BLOCK_SIZE + 1) * Const.AES_BLOCK_SIZE);
         byte[] request = new byte[ISO7816.OFFSET_CDATA + Const.AES_BLOCK_SIZE + cipher_len];
-        crypto.aes.init(crypto.scEncKey, Cipher.MODE_ENCRYPT, secret_IV, (short) 0, Const.SC_BLOCK_SIZE);
-        len = crypto.aes.doFinal(input, (short) 0, len, request, (short) (ISO7816.OFFSET_CDATA + Const.SC_BLOCK_SIZE));
+        try {
+            cipher_len = crypto.encrypt(input, 0, len, request,
+                    ISO7816.OFFSET_CDATA + Const.SC_BLOCK_SIZE, secret_IV, 0);
+        } catch (Exception e) {
+            return null;
+        }
         request[0] = Const.CLA_SIMPLE_APPLET;
         request[1] = instruction;
         request[2] = P1;
         request[3] = P2;
-        request[4] = (byte) (len + Const.AES_BLOCK_SIZE);
-        computeMAC(request, len);
+        request[4] = (byte) (cipher_len + Const.AES_BLOCK_SIZE);
+        computeMAC(request, cipher_len);
         System.arraycopy(request, ISO7816.OFFSET_CDATA, secret_IV, 0, Const.SC_BLOCK_SIZE);
-        CommandAPDU commandAPDU = new CommandAPDU(request, (short) 0, request.length);
+        CommandAPDU commandAPDU;
+        try {
+             commandAPDU = new CommandAPDU(request, (short) 0, request.length);
+        }catch (Exception e) {
+            return null;
+        }
         return Run.simulator.transmitCommand(commandAPDU);
     }
 
-    public short computeMAC(byte[] buffer, short len) {
+    public short computeMAC(byte[] buffer, int len) {
         crypto.mac.init(crypto.scMacKey, Signature.MODE_SIGN);
         crypto.mac.update(buffer, (short) 0, ISO7816.OFFSET_CDATA);
         crypto.mac.update(secret_IV, Const.SC_BLOCK_SIZE, (short) (Const.SC_BLOCK_SIZE - ISO7816.OFFSET_CDATA)); // zero padding
-        return crypto.mac.sign(buffer, (short) (ISO7816.OFFSET_CDATA + Const.SC_BLOCK_SIZE), len,
+        return crypto.mac.sign(buffer, (short) (ISO7816.OFFSET_CDATA + Const.SC_BLOCK_SIZE), (short) len,
                 buffer, ISO7816.OFFSET_CDATA);
     }
 
     //USE THIS TO RECEIVE DATA FROM SECURE CHANNEL
-    public short verifyAndDecrypt(byte[] buffer) {
+    public int verifyAndDecrypt(byte[] buffer) {
         short apduLen = (short) buffer.length;
         if (!verifyMAC(buffer, apduLen)) {
             reset();
             throw new RuntimeException();
         }
-        crypto.aes.init(crypto.scEncKey, Cipher.MODE_DECRYPT, secret_IV, (short) 0, Const.SC_BLOCK_SIZE);
+        byte[] tempArray = secret_IV.clone();
         System.arraycopy(buffer, 0, secret_IV, 0, Const.SC_BLOCK_SIZE);
-        return crypto.aes.doFinal(buffer, Const.SC_BLOCK_SIZE,
-                (short) (apduLen - Const.SC_BLOCK_SIZE) , buffer, (short) 0);
+        try {
+            return crypto.decrypt(buffer, Const.SC_BLOCK_SIZE, apduLen - Const.SC_BLOCK_SIZE, buffer, 0,
+                    tempArray, 0);
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     public boolean verifyMAC(byte[] buffer, short len) {
@@ -120,7 +132,7 @@ public class SecureChannel {
         crypto.sha512.update(pairingSecret, 0, Const.SC_SECRET_LENGTH);
         crypto.sha512.update(response, 0, Const.SC_SECRET_LENGTH);
         crypto.sha512.digest(secret_IV, 0, 64);
-        crypto.scEncKey.setKey(secret_IV, (short) 0);
+        crypto.setEncKey(secret_IV, (short) 0);
         crypto.scMacKey.setKey(secret_IV, Const.SC_SECRET_LENGTH);
         System.arraycopy(response, Const.SC_SECRET_LENGTH, secret_IV, (short) 0, Const.SC_BLOCK_SIZE);
         Arrays.fill(secret_IV, Const.SC_BLOCK_SIZE,
@@ -128,7 +140,7 @@ public class SecureChannel {
         scOpened = true;
     }
 
-    public ResponseAPDU initialize(byte[] response) throws DigestException {
+    public ResponseAPDU initialize(byte[] response) throws Exception {
         byte[] data_to_encrypt = new byte[Const.INIT_ENC_LEN];
         crypto.ecdh.init(crypto.scKeypair.getPrivate());
         short pk_len = (short) (response.length - 3);
@@ -150,10 +162,9 @@ public class SecureChannel {
         crypto.sha256.update(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.sha256.digest(pairingSecret, 0, 32);
         crypto.genBytes(request_data, pk_len, Const.AES_BLOCK_SIZE);
-        crypto.scEncKey.setKey(secret_IV, (short) 0);
-        crypto.aes.init(crypto.scEncKey, Cipher.MODE_ENCRYPT, request_data, pk_len, Const.AES_BLOCK_SIZE);
-        crypto.aes.doFinal(data_to_encrypt, (short) 0, Const.INIT_ENC_LEN, request_data,
-                (short) (pk_len + Const.AES_BLOCK_SIZE));
+        crypto.setEncKey(secret_IV, (short) 0);
+        crypto.encrypt(data_to_encrypt, 0, Const.INIT_ENC_LEN, request_data, pk_len + Const.AES_BLOCK_SIZE,
+                request_data, pk_len);
         CommandAPDU commandAPDU = new CommandAPDU(0x00, Const.INS_INIT, 0x00, 0x00, request_data);
         return Run.simulator.transmitCommand(commandAPDU);
     }
@@ -209,10 +220,8 @@ public class SecureChannel {
     public void reset() {
         Arrays.fill(secret_IV, (byte)0);
         Arrays.fill(challengeResponse, (byte) 0);
-        crypto.scEncKey.clearKey();
-        crypto.scMacKey.clearKey();
-        crypto.scKeypair.genKeyPair();
         scOpened = false;
         pinVerified = false;
+        crypto.reset();
     }
 }

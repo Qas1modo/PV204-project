@@ -39,7 +39,7 @@ public class UserInterface {
             System.out.printf("Command number (1 to show available commands)[%c]:", sc.getState());
             byte[] command = readLine(Const.COMMAND_MAX_LEN);
             if (command == null || !allDigits(command, command.length)) {
-                System.out.println("Invalid input, only digits are allowed");
+                System.out.println("Invalid input, only numbers between 0 and 999 are allowed");
                 continue;
             }
             try {
