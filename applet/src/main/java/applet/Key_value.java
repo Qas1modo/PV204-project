@@ -2,172 +2,266 @@ package applet;
 
 import javacard.framework.*;
 import javacard.security.*;
+import javacardx.crypto.Cipher;
 
-public class Key_Value {
+public class SecretStore extends Applet {
+    // Applet-specific status words
+    private static final short SW_PIN_VERIFICATION_REQUIRED = (short) 0x6300;
+    private static final short SW_PIN_CHANGE_REQUIRED = (short) 0x6301;
+    private static final short SW_SECRET_NOT_FOUND = (short) 0x6A88;
+    private static final short SW_NAME_TOO_LONG = (short) 0x6A80;
+    private static final short SW_VALUE_TOO_LONG = (short) 0x6A81;
+    private static final short SW_STORAGE_FULL = (short) 0x6A84;
+    private static final short SW_INVALID_P1_P2 = (short) 0x6B00;
 
-    // Size of the key and secret value fields
-    public static short SIZE_KEY = 48;
-    public static short SIZE_VALUE = 64;
+    // PIN-related constants
+    private static final byte MAX_PIN_TRIES = 3;
+    private static final byte PIN_LENGTH = 6;
+    private OwnerPIN pin;
 
-    private Key_Value next;  // Pointer to the next record in the linked list
-    private static Key_Value first;  // Pointer to the first record in the linked list
-    private static Key_Value deleted;  // Pointer to the first deleted record in the linked list
+    // Name-value pair related constants
+    private static final short MAX_SECRET_NAME_LENGTH = 32;
+    private static final short MAX_SECRET_VALUE_LENGTH = 64;
+    private static final short MAX_SECRET_COUNT = 16;
+    private short secretCount;
+    private byte[][] secretNames;
+    private byte[][] secretValues;
 
-    private byte[] key;  // Byte array to store the key
-    private byte keyLength;  // Length of the key
-    private byte[] secretValue;  // Byte array to store the secret value
-    private byte secretValueLength;  // Length of the secret value
+    // Encryption-related constants
+    private static final byte[] ENCRYPTION_KEY = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    private static final byte[] ENCRYPTION_IV = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    private Cipher encryptionCipher;
+    private Cipher decryptionCipher;
 
-    // Private constructor for creating a new record
-    private Key_Value() {
-        key = new byte[SIZE_KEY];
-        secretValue = new byte[SIZE_VALUE];
-        next = first;
-        first = this;
+    // APDU-related constants
+    private static final byte CLA_SECRET_STORE = (byte) 0xB0;
+    private static final byte INS_SET_SECRET = (byte) 0x00;
+    private static final byte INS_GET_SECRET_VALUE = (byte) 0x01;
+    private static final byte INS_LIST_SECRET_NAMES = (byte) 0x02;
+    private static final byte INS_VERIFY_PIN = (byte) 0x03;
+    private static final byte INS_CHANGE_PIN = (byte) 0x04;
+
+    // Constructor
+    public SecretStore() {
+        // Initialize the PIN
+        pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
+        pin.update(new byte[] {0x01, 0x02, 0x03, 0x04}, (short) 0, PIN_LENGTH);
+
+        // Initialize the name-value pair arrays
+        secretCount = 0;
+        secretNames = new byte[MAX_SECRET_COUNT][MAX_SECRET_NAME_LENGTH];
+        secretValues = new byte[MAX_SECRET_COUNT][MAX_SECRET_VALUE_LENGTH];
+
+        // Initialize the encryption/decryption ciphers
+        encryptionCipher = Cipher.getInstance("AES/GCM/NoPadding");
+        decryptionCipher = Cipher.getInstance("AES/GCM/NoPadding");
+
+        // Generate a random 96-bit initialization vector (IV)
+        SecureRandom random = new SecureRandom();
+        byte[] iv = new byte[12];
+        random.nextBytes(iv);
+
+        // Generate a random 128-bit key
+        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+        keyGen.init(128);
+        SecretKey key = keyGen.generateKey();
+
+        // Initialize the ciphers with the key and IV
+        GCMParameterSpec spec = new GCMParameterSpec(128, iv);
+        encryptionCipher.init(Cipher.ENCRYPT_MODE, key, spec);
+        decryptionCipher.init(Cipher.DECRYPT_MODE, key, spec);
+
     }
 
-    // Method to get an instance of Key_Value, either by creating a new one or recycling a deleted one
-    static Key_Value getInstance() {
-        if (deleted == null) {
-            // No element to recycle, create a new one
-            return new Key_Value();
-        } else {
-            // Recycle the first available element
-            Key_Value instance = deleted;
-            deleted = instance.next;
-            instance.next = first;
-            first = instance;
-            return instance;
+    // Install the applet
+    public static void install(byte[] bArray, short bOffset, byte bLength) {
+        new SecretStore().register(bArray, (short) (bOffset + 1), bArray[bOffset]);
+    }
+
+    // Process an incoming APDU command
+    public void process(APDU apdu) {
+        // Get the buffer to use
+        byte[] buffer = apdu.getBuffer();
+
+        // Check the class byte
+        if (buffer[ISO7816.OFFSET_CLA] != CLA_SECRET_STORE) {
+            ISOException.throwIt(SW_INVALID_P1_P2);
+        }
+
+        // Check the PIN
+        if (!pin.isValidated()) {
+            ISOException.throwIt(SW_PIN_VERIFICATION_REQUIRED);
+        }
+
+        // Determine the instruction byte and perform the corresponding action
+        switch (buffer[ISO7816.OFFSET_INS]) {
+            case INS_SET_SECRET:
+                storeSecret(apdu, buffer, CLA_SECRET_STORE, buffer[ISO7816.OFFSET_P1]);
+                break;
+
+            case INS_GET_SECRET_VALUE:
+                getSecretValue(apdu, buffer, CLA_SECRET_STORE, buffer[ISO7816.OFFSET_P1]);
+                break;
+
+            case INS_LIST_SECRET_NAMES:
+                listSecretNames(apdu, buffer, CLA_SECRET_STORE);
+                break;
+
+            case INS_VERIFY_PIN:
+                verifyPIN(apdu, buffer);
+                break;
+
+            case INS_CHANGE_PIN:
+                changePIN(apdu, buffer);
+                break;
+
+            default:
+                ISOException.throwIt(SW_INVALID_P1_P2);
         }
     }
 
-    // Method to search for a record with a given key
-    static Key_Value search(byte[] buf, short ofs, byte len) {
-        for (Key_Value record = first; record != null; record = record.next) {
-            if (record.keyLength != len) continue;
-            if (Util.arrayCompare(record.key, (short) 0, buf, ofs, len) == 0)
-                return record;
+    // Method to store a secret
+    private void storeSecret(APDU apdu, byte[] buffer, byte cla, byte p1) {
+        // Check the P1 parameter
+        if (p1 != 0) {
+            ISOException.throwIt(SW_INVALID_P1_P2);
         }
-        return null;
+
+        // Get the name and value from the APDU buffer
+        short nameLength = buffer[ISO7816.OFFSET_LC];
+        if (nameLength > MAX_SECRET_NAME_LENGTH) {
+            ISOException.throwIt(SW_NAME_TOO_LONG);
+        }
+        apdu.setIncomingAndReceive();
+        short valueLength = (short) (apdu.getIncomingLength() - nameLength);
+        if (valueLength > MAX_SECRET_VALUE_LENGTH) {
+            ISOException.throwIt(SW_VALUE_TOO_LONG);
+        }
+        byte[] name = new byte[nameLength];
+        byte[] value = new byte[valueLength];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, name, (short) 0, nameLength);
+        Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + nameLength), value, (short) 0, valueLength);
+
+        // Check if the secret already exists
+        short index = findSecretIndex(name, (short) 0, nameLength);
+        if (index != -1) {
+            ISOException.throwIt(SW_INVALID_P1_P2);
+        }
+
+        // Check if there's room for a new secret
+        if (secretCount >= MAX_SECRET_COUNT) {
+            ISOException.throwIt(SW_STORAGE_FULL);
+        }
+
+        // Encrypt the value
+        byte[] encryptedValue = new byte[MAX_SECRET_VALUE_LENGTH];
+        short encryptedLength = encrypt(value, (short) 0, valueLength, encryptedValue, (short) 0);
+
+        // Add the new secret
+        Util.arrayCopy(name, (short) 0, secretNames[secretCount], (short) 0, nameLength);
+        Util.arrayCopy(encryptedValue, (short) 0, secretValues[secretCount], (short) 0, encryptedLength);
+        secretCount++;
     }
 
-    // Method to get the first record in the linked list
-    public static Key_Value getFirst() {
-        return first;
+    // Method to get the value of a secret
+    private void getSecretValue(APDU apdu, byte[] buffer, byte cla, byte p1) {
+        // Check the P1 parameter
+        if (p1 != 0) {
+            ISOException.throwIt(SW_INVALID_P1_P2);
+        }
+
+        // Get the name from the APDU buffer
+        short nameLength = buffer[ISO7816.OFFSET_LC];
+        if (nameLength > MAX_SECRET_NAME_LENGTH) {
+            ISOException.throwIt(SW_NAME_TOO_LONG);
+        }
+        apdu.setIncomingAndReceive();
+        byte[] name = new byte[nameLength];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, name, (short) 0, nameLength);
+
+        // Find the secret
+        short index = findSecretIndex(name, (short) 0, nameLength);
+        if (index == -1) {
+            ISOException.throwIt(SW_RECORD_NOT_FOUND);
+        }
+
+        // Decrypt the value
+        byte[] encryptedValue = secretValues[index];
+        short encryptedLength = (short) encryptedValue.length;
+        byte[] decryptedValue = new byte[MAX_SECRET_VALUE_LENGTH];
+        short decryptedLength = decrypt(encryptedValue, (short) 0, encryptedLength, decryptedValue, (short) 0);
+
+        // Send the value back to the APDU buffer
+        apdu.setOutgoing();
+        apdu.setOutgoingLength(decryptedLength);
+        Util.arrayCopy(decryptedValue, (short) 0, buffer, (short) 0, decryptedLength);
+        apdu.sendBytes((short) 0, decryptedLength);
     }
 
-    // Private method to remove a record from the linked list
-    private void remove() {
-        if (first == this) {
-            first = next;
-        } else {
-            for (Key_Value record = first; record != null; record = record.next)
-                if (record.next == this)
-                    record.next = next;
+    // Method to list the names of all stored secrets
+    private void listSecretNames(APDU apdu, byte[] buffer, byte cla) {
+        // Check that no P1 or P2 parameter is specified
+        if (buffer[ISO7816.OFFSET_P1] != 0 || buffer[ISO7816.OFFSET_P2] != 0) {
+            ISOException.throwIt(SW_INVALID_P1_P2);
+        }
+
+        // Check that the APDU buffer is large enough to hold all the secret names
+        short totalLength = (short) (secretCount * (MAX_SECRET_NAME_LENGTH + 1));
+        if (totalLength > apdu.setOutgoing()) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // Copy the secret names to the APDU buffer
+        byte[] outgoingBuffer = apdu.getBuffer();
+        short outgoingOffset = 0;
+        for (short i = 0; i < secretCount; i++) {
+            byte[] name = secretNames[i];
+            short nameLength = (short) name.length;
+            Util.arrayCopy(name, (short) 0, outgoingBuffer, outgoingOffset, nameLength);
+            outgoingOffset += nameLength;
+            outgoingBuffer[outgoingOffset++] = 0x00;
+        }
+        apdu.setOutgoingLength(totalLength);
+        apdu.sendBytes((short) 0, totalLength);
+    }
+
+    // Method to verify the PIN
+    private void verifyPIN(APDU apdu, byte[] buffer) {
+        // Get the PIN from the APDU buffer
+        byte pinLength = buffer[ISO7816.OFFSET_LC];
+        if (pinLength != PIN_SIZE) {
+            ISOException.throwIt(SW_INVALID_PIN_LENGTH);
+        }
+        apdu.setIncomingAndReceive();
+        byte[] pinValue = new byte[PIN_SIZE];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, pinValue, (short) 0, PIN_SIZE);
+
+        // Verify the PIN
+        boolean isValid = pin.check(pinValue, (short) 0, PIN_SIZE);
+        if (!isValid) {
+            ISOException.throwIt(SW_INVALID_PIN);
         }
     }
 
-    // Private method to recycle a record
-    private void recycle() {
-        RandomData m_secureRandom =  RandomData.getInstance(RandomData.ALG_FAST);
+    // Method to change the PIN
+    private void changePIN(APDU apdu, byte[] buffer) {
+        // Get the old and new PINs from the APDU buffer
+        byte pinLength = buffer[ISO7816.OFFSET_LC];
+        if (pinLength != 2 * PIN_SIZE) {
+            ISOException.throwIt(SW_INVALID_PIN_LENGTH);
+        }
+        apdu.setIncomingAndReceive();
+        byte[] oldPINValue = new byte[PIN_SIZE];
+        byte[] newPINValue = new byte[PIN_SIZE];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, oldPINValue, (short) 0, PIN_SIZE);
+        Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + PIN_SIZE), newPINValue, (short) 0, PIN_SIZE);
 
-        // Set a seed for the random data generator
-        m_secureRandom.setSeed(new byte[]{(byte)0x13,(byte)0x51,(byte)0x50,(byte)0x55,(byte)0x80,(byte)0x65,(byte)0x42,(byte)0x51,(byte)0x12,(byte)0x95},(short) 0,(short) 10);
+        // Verify the old PIN
+        boolean isValid = pin.check(oldPINValue, (short) 0, PIN_SIZE);
+        if (!isValid) {
+            ISOException.throwIt(SW_INVALID_PIN);
+        }
 
-        // Generate random data for the key and secret value fields
-        m_secureRandom.generateData(this.key, (short) 0, (short) keyLength);
-        m_secureRandom.generateData(this.secretValue, (short) 0, (short) secretValueLength);
-
-        // Reset the record's key and secret value lengths, and add it to the list of deleted records
-        next = deleted;
-        keyLength = 0;
-        secretValueLength = 0;
-        deleted = this;
+        // Change the PIN
+        pin.update(newPINValue, (short) 0, PIN_SIZE);
     }
-
-    // Method to delete all records in the linked list
-static void deleteAll() {
-    // Loop through each record and delete it
-    for (Key_Value record = first; record != null; record = record.next) {
-        JCSystem.beginTransaction(); // Start transaction
-        record.remove(); // Remove the record from memory
-        record.recycle(); // Recycle the record to free up memory
-        JCSystem.commitTransaction(); // Commit the transaction
-    }
-}
-
-static byte delete(byte[] buf, short ofs, byte len) {
-    // Find the record with the given key and delete it
-    Key_Value keyManager = search(buf, ofs, len);
-    if (keyManager != null) {
-        JCSystem.beginTransaction(); // Start transaction
-        keyManager.remove(); // Remove the record from memory
-        keyManager.recycle(); // Recycle the record to free up memory
-        JCSystem.commitTransaction(); // Commit the transaction
-
-        return 1; // delete successful
-    }
-
-    return 0; // delete unsuccessful
-}
-
-static short getAllKeys(byte[] buf, byte ofs) {
-    short len = 0;
-
-    // Loop through each record and copy its key to the output buffer
-    for (Key_Value record = first; record != null; record = record.next) {
-        Util.arrayCopy(record.key, (short) 0, buf, ofs, record.keyLength);
-        ofs += record.keyLength ;
-        len += record.keyLength;
-    }
-
-    return len; // Return the total length of all keys
-}
-
-static short getAllKeyLens(byte[] buf, byte ofs) {
-    short len = 0;
-
-    // Loop through each record and copy its key length to the output buffer
-    for (Key_Value record = first; record != null; record = record.next) {
-        buf[ofs++] = record.keyLength;
-        len++;
-    }
-
-    return len; // Return the total number of keys
-}
-
-byte getKey(byte[] buf, short ofs) {
-    // Copy the key of this record to the output buffer
-    Util.arrayCopy(key, (short) 0, buf, ofs, keyLength);
-    return keyLength; // Return the length of the key
-}
-
-public byte getKeyLength() {
-    return keyLength; // Return the length of the key
-}
-
-public Key_Value getNext() {
-    return next; // Return the next record in the list
-}
-
-public void setKey(byte[] buf, short ofs, byte len) {
-    // Copy the new key to this record's key field
-    Util.arrayCopy(buf, ofs, key, (short) 0, len);
-    keyLength = len; // Update the length of the key
-}
-
-byte getSecretValue(byte[] buf, short ofs) {
-    // Copy the secret value of this record to the output buffer
-    Util.arrayCopy(secretValue, (short) 0, buf, ofs, secretValueLength);
-    return secretValueLength; // Return the length of the secret value
-}
-
-public byte getSecretValueLength() {
-    return secretValueLength; // Return the length of the secret value
-}
-
-public void setSecretValue(byte[] buf, short ofs, byte len) {
-    // Copy the new secret value to this record's secretValue field
-    Util.arrayCopy(buf, ofs, secretValue, (short) 0, len);
-    secretValueLength = len; // Update the length of the secret value
-}
