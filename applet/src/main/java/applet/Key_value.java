@@ -4,7 +4,7 @@ import javacard.framework.*;
 import javacard.security.*;
 import javacardx.crypto.Cipher;
 
-public class SecretStore extends Applet {
+public class Key_Value extends Applet {
     // Applet-specific status words
     private static final short SW_PIN_VERIFICATION_REQUIRED = (short) 0x6300;
     private static final short SW_PIN_CHANGE_REQUIRED = (short) 0x6301;
@@ -16,7 +16,7 @@ public class SecretStore extends Applet {
 
     // PIN-related constants
     private static final byte MAX_PIN_TRIES = 3;
-    private static final byte PIN_LENGTH = 6;
+    private static final byte PIN_SIZE = 6;
     private OwnerPIN pin;
 
     // Name-value pair related constants
@@ -28,8 +28,8 @@ public class SecretStore extends Applet {
     private byte[][] secretValues;
 
     // Encryption-related constants
-    private static final byte[] ENCRYPTION_KEY = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
-    private static final byte[] ENCRYPTION_IV = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    //private static final byte[] ENCRYPTION_KEY = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    //private static final byte[] ENCRYPTION_IV = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
     private Cipher encryptionCipher;
     private Cipher decryptionCipher;
 
@@ -42,40 +42,40 @@ public class SecretStore extends Applet {
     private static final byte INS_CHANGE_PIN = (byte) 0x04;
 
     // Constructor
-    public SecretStore() {
+    public Key_Value() {
         // Initialize the PIN
-        pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
-        pin.update(new byte[] {0x01, 0x02, 0x03, 0x04}, (short) 0, PIN_LENGTH);
+        pin = new OwnerPIN(MAX_PIN_TRIES, PIN_SIZE);
+        pin.update(new byte[]{0x01, 0x02, 0x03, 0x04}, (short) 0, PIN_SIZE);
 
         // Initialize the name-value pair arrays
         secretCount = 0;
         secretNames = new byte[MAX_SECRET_COUNT][MAX_SECRET_NAME_LENGTH];
         secretValues = new byte[MAX_SECRET_COUNT][MAX_SECRET_VALUE_LENGTH];
 
-        // Initialize the encryption/decryption ciphers
-        encryptionCipher = Cipher.getInstance("AES/GCM/NoPadding");
-        decryptionCipher = Cipher.getInstance("AES/GCM/NoPadding");
-
-        // Generate a random 96-bit initialization vector (IV)
-        SecureRandom random = new SecureRandom();
-        byte[] iv = new byte[12];
-        random.nextBytes(iv);
+        // Create AES key object
+        AESKey key = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
 
         // Generate a random 128-bit key
-        KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-        keyGen.init(128);
-        SecretKey key = keyGen.generateKey();
+        Crypto crypto = new Crypto();
+        byte[] keyBytes = new byte[key.getSize()];
+        key.getKey(keyBytes, (short) 0);
+        crypto.random.generateData(keyBytes, (short) 0, (short) keyBytes.length);
 
-        // Initialize the ciphers with the key and IV
-        GCMParameterSpec spec = new GCMParameterSpec(128, iv);
-        encryptionCipher.init(Cipher.ENCRYPT_MODE, key, spec);
-        decryptionCipher.init(Cipher.DECRYPT_MODE, key, spec);
+        // Generate a random 64-bit initialization vector (IV)
+        byte[] iv = new byte[8];
+        crypto.random.generateData(iv, (short) 0, (short) iv.length);
 
+        // Initialize the encryption/decryption ciphers
+        Cipher encryptionCipher = crypto.aes;
+        encryptionCipher.init(key, Cipher.MODE_ENCRYPT, iv, (short) 0, (short) iv.length);
+
+        Cipher decryptionCipher = crypto.aes;
+        decryptionCipher.init(key, Cipher.MODE_DECRYPT, iv, (short) 0, (short) iv.length);
     }
 
     // Install the applet
     public static void install(byte[] bArray, short bOffset, byte bLength) {
-        new SecretStore().register(bArray, (short) (bOffset + 1), bArray[bOffset]);
+        new Key_Value().register(bArray, (short) (bOffset + 1), bArray[bOffset]);
     }
 
     // Process an incoming APDU command
@@ -162,6 +162,17 @@ public class SecretStore extends Applet {
         Util.arrayCopy(encryptedValue, (short) 0, secretValues[secretCount], (short) 0, encryptedLength);
         secretCount++;
     }
+    public short encrypt(byte[] plaintext, short plaintextOffset, short plaintextLength, byte[] ciphertext, short ciphertextOffset) {
+        return encryptionCipher.doFinal(plaintext, plaintextOffset, plaintextLength, ciphertext, ciphertextOffset);
+    }
+
+    public short decrypt(byte[] ciphertext, short ciphertextOffset, short ciphertextLength, byte[] plaintext, short plaintextOffset) {
+        return decryptionCipher.doFinal(ciphertext, ciphertextOffset, ciphertextLength, plaintext, plaintextOffset);
+    }
+
+
+
+
 
     // Method to get the value of a secret
     private void getSecretValue(APDU apdu, byte[] buffer, byte cla, byte p1) {
@@ -182,7 +193,7 @@ public class SecretStore extends Applet {
         // Find the secret
         short index = findSecretIndex(name, (short) 0, nameLength);
         if (index == -1) {
-            ISOException.throwIt(SW_RECORD_NOT_FOUND);
+            ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);;
         }
 
         // Decrypt the value
@@ -190,6 +201,7 @@ public class SecretStore extends Applet {
         short encryptedLength = (short) encryptedValue.length;
         byte[] decryptedValue = new byte[MAX_SECRET_VALUE_LENGTH];
         short decryptedLength = decrypt(encryptedValue, (short) 0, encryptedLength, decryptedValue, (short) 0);
+
 
         // Send the value back to the APDU buffer
         apdu.setOutgoing();
@@ -230,7 +242,7 @@ public class SecretStore extends Applet {
         // Get the PIN from the APDU buffer
         byte pinLength = buffer[ISO7816.OFFSET_LC];
         if (pinLength != PIN_SIZE) {
-            ISOException.throwIt(SW_INVALID_PIN_LENGTH);
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
         apdu.setIncomingAndReceive();
         byte[] pinValue = new byte[PIN_SIZE];
@@ -239,7 +251,7 @@ public class SecretStore extends Applet {
         // Verify the PIN
         boolean isValid = pin.check(pinValue, (short) 0, PIN_SIZE);
         if (!isValid) {
-            ISOException.throwIt(SW_INVALID_PIN);
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
     }
 
@@ -248,7 +260,7 @@ public class SecretStore extends Applet {
         // Get the old and new PINs from the APDU buffer
         byte pinLength = buffer[ISO7816.OFFSET_LC];
         if (pinLength != 2 * PIN_SIZE) {
-            ISOException.throwIt(SW_INVALID_PIN_LENGTH);
+            ISOException.throwIt((short) 0x6984);
         }
         apdu.setIncomingAndReceive();
         byte[] oldPINValue = new byte[PIN_SIZE];
@@ -259,9 +271,19 @@ public class SecretStore extends Applet {
         // Verify the old PIN
         boolean isValid = pin.check(oldPINValue, (short) 0, PIN_SIZE);
         if (!isValid) {
-            ISOException.throwIt(SW_INVALID_PIN);
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
         // Change the PIN
         pin.update(newPINValue, (short) 0, PIN_SIZE);
     }
+    private short findSecretIndex(byte[] name, short offset, short length) {
+        for (short i = 0; i < secretCount; i++) {
+            if (Util.arrayCompare(name, offset, secretNames[i], (short) 0, length) == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+}
