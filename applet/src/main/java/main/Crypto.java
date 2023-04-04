@@ -1,42 +1,62 @@
 package main;
 
-import javacard.security.*;
-import javacardx.crypto.Cipher;
+
+import javax.crypto.SecretKey;
 import java.security.SecureRandom;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import javacard.security.*;
+import javax.crypto.Cipher;
+import java.security.MessageDigest;
 
 public class Crypto {
-    final public short AES_BLOCK_SIZE = 16;
-    public final short SC_KEY_LENGTH = 256;
-    public final short SC_SECRET_LENGTH = 32;
-    public AESKey scEncKey;
+    private SecretKey scEncKey;
     public AESKey scMacKey;
-    public SecureRandom random;
-    public KeyAgreement ecdh;
-    public MessageDigest sha256;
-    public MessageDigest sha512;
-    public Cipher aes;
-    public Signature mac;
-    public byte[] pairingSecret;
-    public KeyPair scKeypair;
-    public final byte PIN_LENGTH = 6;
-    public final byte PUK_LENGTH = 10;
-    public final short SC_BLOCK_SIZE = 16;
-    public final short INIT_ENC_LEN = PIN_LENGTH + PUK_LENGTH + SC_SECRET_LENGTH;
-    public final short INIT_AES_LEN = (INIT_ENC_LEN / SC_BLOCK_SIZE + 1) * SC_BLOCK_SIZE;
+    private final SecureRandom random;
+    private final KeyAgreement ecdh;
+    public final MessageDigest sha256;
+    public final MessageDigest sha512;
+    private final Cipher aes;
+    public final Signature mac;
+    private final KeyPair scKeypair;
+
     public Crypto() {
-        random = new SecureRandom();
-        sha256 = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
-        ecdh = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH_PLAIN, false);
-        sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false);
-        aes = Cipher.getInstance(Cipher.ALG_AES_CBC_ISO9797_M2,false);
-        mac = Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
-        scEncKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
-                KeyBuilder.LENGTH_AES_256, false);
-        scMacKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
-                KeyBuilder.LENGTH_AES_256, false);
-        pairingSecret = new byte[(short)SC_SECRET_LENGTH];
-        scKeypair = new KeyPair(KeyPair.ALG_EC_FP, SC_KEY_LENGTH);
+        try {
+            random = new SecureRandom();
+            sha256 = java.security.MessageDigest.getInstance("SHA-256");
+            sha512 = java.security.MessageDigest.getInstance("SHA-512");
+            aes = Cipher.getInstance("AES/CBC/NoPadding");
+            ecdh = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH_PLAIN, false);
+            mac = Signature.getInstance(Signature.ALG_AES_MAC_128_NOPAD, false);
+            scMacKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
+                    KeyBuilder.LENGTH_AES_256, false);
+            scKeypair = new KeyPair(KeyPair.ALG_EC_FP, Const.SC_KEY_LENGTH);
+            scKeypair.genKeyPair();
+        } catch (Exception e) {
+            throw new RuntimeException();
+        }
+    }
+
+    public int exportKey(byte[] buffer, int off) {
+        ECPublicKey pk = (ECPublicKey) scKeypair.getPublic();
+        short length = pk.getW(buffer, (short) off);
+        if (length != Const.EC_KEY_LEN) {
+            throw new RuntimeException("Keys are different length");
+        }
+        return length;
+    }
+
+    public int generateSecret(byte[] input, int off, byte[] output, int outOff) {
+        ecdh.init(scKeypair.getPrivate());
+        return ecdh.generateSecret(input, (short) off, Const.EC_KEY_LEN, output, (short) outOff);
+    }
+
+    public void genKeyPair(){
         scKeypair.genKeyPair();
+    }
+
+    public void setEncKey(byte[] key, int off) {
+        scEncKey = new SecretKeySpec(key, off, Const.SC_KEY_LENGTH / 8, "AES");
     }
 
     public void genBytes(byte[] buffer, int offset, int length) {
@@ -45,4 +65,35 @@ public class Crypto {
         System.arraycopy(randomBuffer, 0, buffer, offset, length);
     }
 
+    public int encrypt(byte[] input, int inputOff, int inputLen, byte[] output, int outputOff,
+                          byte[] iv, int ivOff) throws Exception {
+        int newArraySize = (((inputLen + 1)/ 16) + 1) * Const.AES_BLOCK_SIZE;
+        byte[] inputPadded = new byte[newArraySize];
+        System.arraycopy(input, inputOff, inputPadded, 0, inputLen);
+        inputPadded[inputLen] = (byte)0x80;
+        aes.init(Cipher.ENCRYPT_MODE, scEncKey ,new IvParameterSpec(iv, ivOff, Const.AES_BLOCK_SIZE));
+        return aes.doFinal(inputPadded, 0, newArraySize, output, outputOff);
+    }
+
+    public int decrypt(byte[] input, int inputOff, int inputLen, byte[] output, int outputOff,
+                          byte[] iv, int ivOff) throws Exception {
+        byte[] transientArray = new byte[inputLen];
+        aes.init(Cipher.DECRYPT_MODE, scEncKey ,new IvParameterSpec(iv, ivOff, Const.AES_BLOCK_SIZE));
+        int outLen =  aes.doFinal(input, inputOff, inputLen, transientArray, 0);
+        byte padding;
+        for (int i = outLen - 1; i >= 0; i--) {
+            padding = transientArray[i];
+            if (padding == (byte) 0x80) {
+                System.arraycopy(transientArray, 0, output, outputOff, i);
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public void reset() {
+        scMacKey.clearKey();
+        scEncKey = null;
+        scKeypair.genKeyPair();
+    }
 }

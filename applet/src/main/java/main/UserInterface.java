@@ -1,28 +1,31 @@
 package main;
 
 public class UserInterface {
-
-    private final int COMMAND_MAX_LEN = 3;
-    SecretStorageAPDU apdu;
-    Crypto crypto;
+    private final SecretStorageAPDU apdu;
+    private final SecureChannel sc;
     public UserInterface(SecretStorageAPDU apdu) {
-        this.crypto = apdu.crypto;
         this.apdu = apdu;
+        this.sc = apdu.sc;
     }
 
     public void start() {
         boolean secureChannelOpened;
         while (true)
         {
-            apdu.selectApp();
+            try {
+                apdu.selectApp();
+            }
+            catch (Exception e) {
+                System.out.println("Failed to select card, exiting...");
+            }
             do{
                 try {
-                    apdu.openSc();
+                    sc.openSc();
                 } catch (Exception e) {
                     System.out.println("Failed to open secure channel, exiting...");
                     return;
                 }
-                secureChannelOpened = apdu.verifySc();
+                secureChannelOpened = sc.verifySc();
                 if (!secureChannelOpened) {
                     System.out.println("Failed to verify secure channel, retrying...");
                 }
@@ -33,10 +36,10 @@ public class UserInterface {
 
     public void parseInput() {
         while (true) {
-            System.out.printf("Command number (1 to show available commands)[%c]:", apdu.getState());
-            byte[] command = readLine(COMMAND_MAX_LEN);
-            if (!allDigits(command, command.length)) {
-                System.out.println("Invalid input, only digits are allowed");
+            System.out.printf("Command number (1 to show available commands)[%c]:", sc.getState());
+            byte[] command = readLine(Const.COMMAND_MAX_LEN);
+            if (command == null || !allDigits(command, command.length)) {
+                System.out.println("Invalid input, only numbers between 0 and 999 are allowed");
                 continue;
             }
             try {
@@ -47,7 +50,7 @@ public class UserInterface {
                 if (e.pairingRemoved) {
                     System.out.print("Successfully unpaired, pair again ? (type 0 to exit):");
                     command = readLine(1);
-                    if (command.length == 1 && command[0] == 48) {
+                    if (command != null && command.length == 1 && command[0] == 48) {
                         System.out.println("Exiting...");
                         System.exit(0);
                     }
@@ -71,11 +74,11 @@ public class UserInterface {
             case 3:
                 return apdu.unblockPin();
             case 4:
-                return apdu.changePin(apdu.CHANGE_PIN);
+                return apdu.changePin(Const.CHANGE_PIN);
             case 5:
-                return apdu.changePin(apdu.CHANGE_PUK);
+                return apdu.changePin(Const.CHANGE_PUK);
             case 6:
-                if (!apdu.changePin(apdu.CHANGE_PAIRING_SECRET)) {
+                if (!apdu.changePin(Const.CHANGE_PAIRING_SECRET)) {
                     return false;
                 }
                 throw new NeedResetException();
@@ -87,7 +90,7 @@ public class UserInterface {
             case 8:
                 return apdu.showStatus();
             case 20:
-                apdu.reset();
+                sc.reset();
                 throw new NeedResetException();
             case 21:
                 System.exit(0);
@@ -111,35 +114,35 @@ public class UserInterface {
     }
 
 
-    public byte[] getPin(boolean ret_stat) {
+    public static byte[] getPin(boolean ret_stat) {
         if (ret_stat) {
             return new byte[]{0x30, 0x30, 0x30, 0x30, 0x30, 0x30};
         }
         System.out.print("Enter PIN:");
-        byte[] pin = readLine(crypto.PIN_LENGTH);
-        while (pin == null || pin.length != crypto.PIN_LENGTH || !allDigits(pin, pin.length)) {
-            System.out.printf("PIN must be %s digits long%n", crypto.PIN_LENGTH);
+        byte[] pin = readLine(Const.PIN_LENGTH);
+        while (pin == null || pin.length != Const.PIN_LENGTH || !allDigits(pin, pin.length)) {
+            System.out.printf("PIN must be %s digits long%n", Const.PIN_LENGTH);
             System.out.print("Enter PIN:");
-            pin = readLine(crypto.PIN_LENGTH);
+            pin = readLine(Const.PIN_LENGTH);
         }
         return pin;
     }
 
-    public byte[] getPuk(boolean ret_stat) {
+    public static byte[] getPuk(boolean ret_stat) {
         if (ret_stat) {
             return new byte[]{0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39};
         }
         System.out.print("Enter PUK:");
-        byte[] puk = readLine(crypto.PUK_LENGTH);
-        while (puk == null || puk.length != crypto.PUK_LENGTH || !allDigits(puk, puk.length)) {
-            System.out.printf("PUK must be %s digits long%n", crypto.PUK_LENGTH);
+        byte[] puk = readLine(Const.PUK_LENGTH);
+        while (puk == null || puk.length != Const.PUK_LENGTH || !allDigits(puk, puk.length)) {
+            System.out.printf("PUK must be %s digits long%n", Const.PUK_LENGTH);
             System.out.print("Enter PUK:");
-            puk = readLine(crypto.PUK_LENGTH);
+            puk = readLine(Const.PUK_LENGTH);
         }
         return puk;
     }
 
-    public byte[] readLine(int maxLen) {
+    public static byte[] readLine(int maxLen) {
         int index = 0;
         byte readChar;
         byte[] data = new byte[maxLen];
@@ -166,7 +169,7 @@ public class UserInterface {
         return data;
     }
 
-    public boolean allDigits(byte[] buffer, int length) {
+    public static boolean allDigits(byte[] buffer, int length) {
         while (length > 0) {
             length--;
             byte c = buffer[length];

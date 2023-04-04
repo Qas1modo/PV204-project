@@ -11,6 +11,7 @@ public class Run {
     public static void main(String[] args){
         SecretStorageAPDU application = new SecretStorageAPDU();
         simulator.installApplet(appletAID, SecretStorageApplet.class);
-        application.ui.start();
+        UserInterface ui = new UserInterface(application);
+        ui.start();
     }
 }
