@@ -33,8 +33,8 @@ public class SecureChannel {
     public final byte VERIFICATION_FIRST_STEP = 0;
     public final byte VERIFICATION_SECOND_STEP = 1;
 
-    public SecureChannel(Crypto crypto) {
-        this.crypto = crypto;
+    public SecureChannel() {
+        crypto = new Crypto();
         scEncKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
                 KeyBuilder.LENGTH_AES_256, false);
         scMacKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,

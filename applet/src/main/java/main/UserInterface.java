@@ -66,34 +66,52 @@ public class UserInterface {
     //Add new methods here to call APDU operations
     private boolean callCommand(int input) throws NeedResetException {
         switch (input) {
+            case 0:
+                System.out.print("Confirm exit by typing y:");
+                byte[] confirm = readLine(1);
+                if (confirm == null || confirm.length != 1 || confirm[0] != 121) {
+                    System.out.print("Cancelling exit...");
+                    return true;
+                }
+                System.exit(0);
             case 1:
                 showLegend();
                 return true;
             case 2:
                 return apdu.verifyPin();
             case 3:
-                return apdu.unblockPin();
+                return apdu.showStatus();
             case 4:
-                return apdu.changePin(Const.CHANGE_PIN);
+                return apdu.storeSecret();
             case 5:
-                return apdu.changePin(Const.CHANGE_PUK);
+                return apdu.listNames();
             case 6:
+                return apdu.showSecret(false);
+            case 7:
+                return apdu.showSecret(true);
+            case 8:
+                return apdu.removeSecret();
+            case 9:
+                return apdu.unblockPin();
+            case 10:
+                return apdu.changePin(Const.CHANGE_PIN);
+            case 11:
+                return apdu.changePin(Const.CHANGE_PUK);
+            case 12:
                 if (!apdu.changePin(Const.CHANGE_PAIRING_SECRET)) {
                     return false;
                 }
                 throw new NeedResetException();
-            case 7:
+            case 13:
                 if (!apdu.unpair()) {
                     return false;
                 }
                 throw new NeedResetException(true);
-            case 8:
-                return apdu.showStatus();
-            case 20:
+            case 14:
                 sc.reset();
                 throw new NeedResetException();
-            case 21:
-                System.exit(0);
+//            case 15:
+//                return apdu.storeSecret(true);
             default:
                 System.err.println("Invalid command!");
                 return false;
@@ -101,16 +119,22 @@ public class UserInterface {
     }
 
     private void showLegend() {
+        System.out.println("Type 0 to exit!");
         System.out.println("Type 1 to show this menu!");
         System.out.println("Type 2 to verify PIN!");
-        System.out.println("Type 3 to unblock PIN!");
-        System.out.println("Type 4 to change PIN!");
-        System.out.println("Type 5 to change PUK!");
-        System.out.println("Type 6 to change pairing secret (RESETS SC)!");
-        System.out.println("Type 7 to remove pairing secret (RESETS SC)!");
-        System.out.println("Type 8 to show status!");
-        System.out.println("Type 20 to RESET SC!");
-        System.out.println("Type 21 to exit!");
+        System.out.println("Type 3 to show status!");
+        System.out.println("Type 4 to store secret!");
+        System.out.println("Type 5 to list secrets!");
+        System.out.println("Type 6 to show specific secret in UTF8!");
+        System.out.println("Type 7 to show specific secret in byte array!");
+        System.out.println("Type 8 to remove secret!");
+        System.out.println("Type 9 to unblock PIN!");
+        System.out.println("Type 10 to change PIN!");
+        System.out.println("Type 11 to change PUK!");
+        System.out.println("Type 12 to change pairing secret (resets SC)!");
+        System.out.println("Type 13 to remove pairing secret (resets SC)!");
+        System.out.println("Type 14 to reset SC!");
+        //System.out.println("Type 15 to create random secret (for testing)!");
     }
 
 
@@ -151,6 +175,9 @@ public class UserInterface {
                 readChar = (byte) System.in.read();
                 if (index < maxLen) {
                     if (readChar == '\n') {
+                        if (index == 0) {
+                            return null;
+                        }
                         byte[] smallerData = new byte[index];
                         System.arraycopy(data, 0, smallerData, 0, index);
                         return smallerData;
@@ -162,6 +189,7 @@ public class UserInterface {
         }
         catch (Exception e) {
             System.err.println("Unable to get input!");
+            return null;
         }
         if (index > maxLen + 1) {
             return null;

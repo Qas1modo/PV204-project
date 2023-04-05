@@ -53,8 +53,8 @@ public class SecureChannel {
     }
 
     //USE THIS TO RESPOND BY SECURE CHANNEL
-    public ResponseAPDU secureRespond(byte[] input, short len, byte instruction, byte P1, byte P2) {
-        int cipher_len = (short) (((len + 1) / Const.AES_BLOCK_SIZE + 1) * Const.AES_BLOCK_SIZE);
+    public ResponseAPDU secureRespond(byte[] input, int len, byte instruction, byte P1, byte P2) {
+        int cipher_len = ((len + 1) / Const.AES_BLOCK_SIZE + 1) * Const.AES_BLOCK_SIZE;
         byte[] request = new byte[ISO7816.OFFSET_CDATA + Const.AES_BLOCK_SIZE + cipher_len];
         try {
             cipher_len = crypto.encrypt(input, 0, len, request,
@@ -117,12 +117,8 @@ public class SecureChannel {
         ResponseAPDU responseAPDU = Run.simulator.transmitCommand(commandAPDU);
         byte[] response = responseAPDU.getData();
         int length;
-        try {
-            length = crypto.generateSecret(response, Const.AES_BLOCK_SIZE + Const.SC_SECRET_LENGTH, secret_IV,
+        length = crypto.generateSecret(response, Const.AES_BLOCK_SIZE + Const.SC_SECRET_LENGTH, secret_IV,
                     0);
-        } catch (Exception e){
-            throw new RuntimeException();
-        }
         crypto.sha512.update(secret_IV, 0, length);
         crypto.sha512.update(pairingSecret, 0, Const.SC_SECRET_LENGTH);
         crypto.sha512.update(response, 0, Const.SC_SECRET_LENGTH);
