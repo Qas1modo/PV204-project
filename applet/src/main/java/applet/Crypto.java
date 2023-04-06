@@ -12,7 +12,7 @@ public class Crypto {
     public Cipher aes;
     public Signature mac;
     public Crypto() {
-        random = RandomData.getInstance(RandomData.ALG_KEYGENERATION);
+        random = RandomData.getInstance(RandomData.ALG_SECURE_RANDOM);
         sha256 = MessageDigest.getInstance(MessageDigest.ALG_SHA_256, false);
         ecdh = KeyAgreement.getInstance(KeyAgreement.ALG_EC_SVDP_DH_PLAIN, false);
         sha512 = MessageDigest.getInstance(MessageDigest.ALG_SHA_512, false);

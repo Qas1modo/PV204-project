@@ -82,7 +82,7 @@ public class UserInterface {
             case 3:
                 return apdu.showStatus();
             case 4:
-                return apdu.storeSecret();
+                return apdu.storeSecret(false);
             case 5:
                 return apdu.listNames();
             case 6:
@@ -110,8 +110,8 @@ public class UserInterface {
             case 14:
                 sc.reset();
                 throw new NeedResetException();
-//            case 15:
-//                return apdu.storeSecret(true);
+            case 15:
+                return apdu.storeSecret(true);
             default:
                 System.err.println("Invalid command!");
                 return false;
@@ -134,7 +134,7 @@ public class UserInterface {
         System.out.println("Type 12 to change pairing secret (resets SC)!");
         System.out.println("Type 13 to remove pairing secret (resets SC)!");
         System.out.println("Type 14 to reset SC!");
-        //System.out.println("Type 15 to create random secret (for testing)!");
+        System.out.println("Type 15 to create random secret (for testing)!");
     }
 
 
