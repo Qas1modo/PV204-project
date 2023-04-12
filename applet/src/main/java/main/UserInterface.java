@@ -1,8 +1,15 @@
 package main;
 
+import java.io.*;
+import java.security.DigestException;
+import java.util.Arrays;
+import java.util.Base64;
+
 public class UserInterface {
     private final SecretStorageAPDU apdu;
     private final SecureChannel sc;
+
+    private static final String FILENAME = "secret.txt";
     public UserInterface(SecretStorageAPDU apdu) {
         this.apdu = apdu;
         this.sc = apdu.sc;
@@ -10,18 +17,13 @@ public class UserInterface {
 
     public void start() {
         boolean secureChannelOpened;
+        apdu.selectApp(true);
         while (true)
         {
-            try {
-                apdu.selectApp();
-            }
-            catch (Exception e) {
-                System.out.println("Failed to select card, exiting...");
-            }
             do{
                 try {
                     sc.openSc();
-                } catch (Exception e) {
+                } catch (DigestException e) {
                     System.out.println("Failed to open secure channel, exiting...");
                     return;
                 }
@@ -30,11 +32,13 @@ public class UserInterface {
                     System.out.println("Failed to verify secure channel, retrying...");
                 }
             } while (!secureChannelOpened);
-            parseInput();
+            if (!parseInput()) {
+                return;
+            }
         }
     }
 
-    public void parseInput() {
+    public boolean parseInput() {
         while (true) {
             System.out.printf("Command number (1 to show available commands)[%c]:", sc.getState());
             byte[] command = readLine(Const.COMMAND_MAX_LEN);
@@ -52,7 +56,7 @@ public class UserInterface {
                     command = readLine(1);
                     if (command != null && command.length == 1 && command[0] == 48) {
                         System.out.println("Exiting...");
-                        System.exit(0);
+                        return false;
                     }
                 }
                 break;
@@ -61,6 +65,8 @@ public class UserInterface {
             }
         }
         System.out.println("Secure channel destroyed, proceeding to reinitialization!");
+        apdu.selectApp(false);
+        return true;
     }
 
     //Add new methods here to call APDU operations
@@ -206,5 +212,39 @@ public class UserInterface {
             }
         }
         return true;
+    }
+
+    public static String outputPS(byte[] buffer, int off, int len) {
+         String output = Base64.getEncoder().encodeToString(Arrays.copyOfRange(buffer, off, off+len));
+         File file = new File(FILENAME);
+         try {
+             if (!file.exists() && !file.createNewFile()) {
+                 System.err.println("Failed to create file to save PS!");
+                 return output;
+             }
+             BufferedWriter writer = new BufferedWriter(new FileWriter(FILENAME));
+             writer.write(output);
+             writer.newLine();
+             writer.close();
+         } catch (Exception e) {
+             System.err.println("Unable to save PS into filesystem.");
+             return output;
+         }
+         return output;
+    }
+
+    public static byte[] inputPS() {
+        byte[] ps = new byte[Const.SC_SECRET_LENGTH];
+        String input;
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader(FILENAME));
+            input = reader.readLine();
+            reader.close();
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to retrieve PS!");
+        }
+        byte[] base = Base64.getDecoder().decode(input);
+        System.arraycopy(base, 0, ps, 0, Const.SC_SECRET_LENGTH);
+        return ps;
     }
 }

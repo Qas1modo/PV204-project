@@ -47,6 +47,8 @@ public class SecureChannel {
         pairingSecret = new byte[SC_SECRET_LENGTH];
         antiBug = JCSystem.makeTransientByteArray(MAX_RESPONSE_LENGTH, JCSystem.CLEAR_ON_DESELECT); // Need to fix error - consultation
         scKeypair = new KeyPair(KeyPair.ALG_EC_FP, SC_KEY_LENGTH);
+        SecP256k1.setCurveParameters((ECKey) scKeypair.getPrivate());
+        SecP256k1.setCurveParameters((ECKey) scKeypair.getPublic());
         scKeypair.genKeyPair();
     }
 

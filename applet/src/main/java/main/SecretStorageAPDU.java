@@ -2,6 +2,7 @@ package main;
 
 import javacard.framework.ISO7816;
 
+import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -227,12 +228,14 @@ public class SecretStorageAPDU {
     }
 
     public boolean showStatus() {
-        if (!checkPrerequisites(true, false, false, false)) {
-            return false;
-        }
         byte[] request = new byte[0];
-        ResponseAPDU response = sc.secureRespond(request, request.length, Const.INS_STATUS,
-                (byte)0x00, (byte)0x00);
+        ResponseAPDU response;
+        if (sc.isOpened()) {
+            response = sc.secureRespond(request, request.length, Const.INS_STATUS,
+                    (byte)0x00, (byte)0x00);
+        } else {
+            response = Run.transmit(new CommandAPDU(Const.CLA_SIMPLE_APPLET, Const.INS_STATUS, (byte)0x00, (byte)0x00));
+        }
         byte[] data = response.getData();
         int len = data.length;
         if (sc.isOpened()) {
@@ -314,6 +317,7 @@ public class SecretStorageAPDU {
                         Const.CHANGE_PAIRING_SECRET, (byte)0x00);
                 if (validPin(response)) {
                     sc.changePS(ps, Const.PIN_LENGTH, Const.SC_SECRET_LENGTH);
+                    sc.reset();
                 }
                 break;
             default:
@@ -380,19 +384,23 @@ public class SecretStorageAPDU {
        return true;
     }
 
-    public void selectApp() throws Exception {
+    public void selectApp(boolean updatePS) {
         sc.reset();
-        byte[] select_response = Run.simulator.selectAppletWithResult(Run.appletAID);
+        byte[] select_response = Run.select();
         switch (select_response[0]){
             case Const.RET_NOT_INIT:
                 System.out.println("Card not initialized, starting first time setup...\n");
                 sc.initialize(select_response);
                 return;
             case Const.RET_INITIALIZED:
+                if (updatePS) {
+                    byte[] ps = UserInterface.inputPS();
+                    sc.changePS(ps, 0, Const.SC_SECRET_LENGTH);
+                }
                 System.out.println("Card already initialized, starting...\n");
                 return;
             default:
-                throw new RuntimeException();
+                throw new RuntimeException("Invalid response!");
         }
     }
 }

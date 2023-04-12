@@ -18,7 +18,7 @@ public class SecretStorageApplet extends Applet {
     public static final byte CHANGE_PUK = 0x01;
     public static final byte CHANGE_PAIRING_SECRET = 0x02;
 
-    public static final byte MAX_SECRETS = 1;
+    public static final byte MAX_SECRETS = 30;
     public static final byte MAX_SECRET_LENGTH = 64;
     public static final byte MAX_NAME_LENGTH = 16;
     public static final byte MAX_NAMES_PER_RESPONSE = 14;
@@ -50,8 +50,6 @@ public class SecretStorageApplet extends Applet {
     private final static byte INS_UNPAIR = (byte) 0x30;
     private final static byte INS_STATUS = (byte) 0x31;
     private final static byte INS_REMOVE = (byte) 0x32;
-    private final static byte INS_CHANGE_SECRET = (byte) 0x45;
-    private final static byte INS_PIN_CHANGE = (byte) 0x46;
 
     // EXCEPTIONS
     private final static short SW_Exception = (short) 0xff01;
@@ -136,13 +134,6 @@ public class SecretStorageApplet extends Applet {
                         break;
                     case INS_STATUS:
                         status(apdu, buffer);
-                        break;
-                    // remove in release - safe mechanism
-                    case INS_CHANGE_SECRET:
-                        sc.updatePairingSecret(buffer, ISO7816.OFFSET_CDATA);
-                        break;
-                    case INS_PIN_CHANGE:
-                        changeUserPIN(buffer, PIN_LENGTH);
                         break;
                     default:
                         ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
@@ -231,11 +222,13 @@ public class SecretStorageApplet extends Applet {
             ISOException.throwIt(SW_VALUE_ALREADY_PRESENT);
         }
         short storeIndex = findFirstEmpty();
+        JCSystem.beginTransaction();
         Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, secretNames,
                 (short) (storeIndex * NAME_STORAGE), (short) (nameLength + 1));
         Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + nameLength + 1),
                 secretValues, (short) (storeIndex * SECRET_STORAGE), (short) (secretLength + 1));
         secretCount++;
+        JCSystem.commitTransaction();
         buffer[0] = SUCCESS;
         sc.secureRespond(apdu, buffer, (short) 1);
     }
@@ -337,9 +330,14 @@ public class SecretStorageApplet extends Applet {
         if (!pin.check(buffer, ISO7816.OFFSET_CDATA, PIN_LENGTH)) {
             ISOException.throwIt((short) (SW_INVALID_PASSWORD + pin.getTriesRemaining()));
         }
-        initialized = false;
+        JCSystem.beginTransaction();
+        Util.arrayFillNonAtomic(secretNames, (short) (MAX_SECRETS * NAME_STORAGE), NAME_STORAGE, (byte) 0x00);
+        Util.arrayFillNonAtomic(secretValues, (short) (MAX_SECRETS * SECRET_STORAGE), SECRET_STORAGE, (byte) 0x00);
+        secretCount = 0;
         sc.removePairingSecret();
+        initialized = false;
         sc.reset();
+        JCSystem.commitTransaction();
     }
 
     public void changePIN(APDU apdu, byte[] buffer) {
@@ -380,6 +378,7 @@ public class SecretStorageApplet extends Applet {
         pin.update(buffer, (short) (ISO7816.OFFSET_CDATA + PIN_LENGTH), PIN_LENGTH);
         return pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + PIN_LENGTH), PIN_LENGTH);
     }
+
 
     private boolean changePUK(byte[] buffer, short len) {
         if (!(len == (PUK_LENGTH + PIN_LENGTH) && allDigits(buffer, ISO7816.OFFSET_CDATA, len))) {
