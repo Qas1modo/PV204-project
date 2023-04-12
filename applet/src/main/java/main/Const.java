@@ -1,6 +1,9 @@
 package main;
 
 public class Const {
+    public static final byte MAX_SECRET_LENGTH = 64;
+    public static final byte MAX_NAME_LENGTH = 16;
+    public static final byte SUCCESS = 0x01;
 
     //INSTRUCTIONS
     public final static byte CLA_SIMPLE_APPLET = (byte) 0x00;
@@ -15,15 +18,16 @@ public class Const {
     public final static byte INS_RETRIEVE = (byte)0x29;
     public final static byte INS_UNPAIR = (byte)0x30;
     public final static byte INS_STATUS = (byte)0x31;
+    public final static byte INS_REMOVE = (byte)0x32;
 
     //SPECIFIC COMMANDS (P1)
-    public final static byte CHANGE_PIN = 0;
-    public final static byte CHANGE_PUK = 1;
-    public final static byte CHANGE_PAIRING_SECRET = 2;
+    public final static byte CHANGE_PIN = 0x00;
+    public final static byte CHANGE_PUK = 0x01;
+    public final static byte CHANGE_PAIRING_SECRET = 0x02;
 
     //CONSTANTS
     public final static byte EC_KEY_LEN = 65;
-    public static final byte STATUS_LEN = 6;
+    public static final byte STATUS_LEN = 8;
 
     //RETURN VALUES
     public final static byte RET_NOT_INIT = (byte) 0xa0;
@@ -43,5 +47,6 @@ public class Const {
 
     // UI constants
     public final static int COMMAND_MAX_LEN = 3;
-
+    public final static short SW_STORAGE_FULL = (short) 0x6A84;
+    public final static short SW_VALUE_ALREADY_PRESENT = (short) 0x6A85;
 }

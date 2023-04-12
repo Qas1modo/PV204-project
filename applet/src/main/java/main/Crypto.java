@@ -5,6 +5,8 @@ import javax.crypto.SecretKey;
 import java.security.SecureRandom;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import applet.SecP256k1;
 import javacard.security.*;
 import javax.crypto.Cipher;
 import java.security.MessageDigest;
@@ -31,9 +33,11 @@ public class Crypto {
             scMacKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
                     KeyBuilder.LENGTH_AES_256, false);
             scKeypair = new KeyPair(KeyPair.ALG_EC_FP, Const.SC_KEY_LENGTH);
+            SecP256k1.setCurveParameters((ECKey) scKeypair.getPrivate());
+            SecP256k1.setCurveParameters((ECKey) scKeypair.getPublic());
             scKeypair.genKeyPair();
         } catch (Exception e) {
-            throw new RuntimeException();
+            throw new RuntimeException("Error during initialization of cryptography module!");
         }
     }
 

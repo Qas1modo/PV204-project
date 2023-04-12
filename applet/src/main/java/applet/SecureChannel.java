@@ -19,22 +19,25 @@ public class SecureChannel {
     private final byte[] pairingSecret;
     private final byte[] rand;
 
+    private final byte[] antiBug;
+
     //CONSTANTS
     public final static byte SC_SECRET_LENGTH = 32;
+    public final short MAX_RESPONSE_LENGTH = 240;
     public static final short INIT_ENC_LEN = SecretStorageApplet.PIN_LENGTH + SecretStorageApplet.PUK_LENGTH
             + SecureChannel.SC_SECRET_LENGTH;
     public final short SC_KEY_LENGTH = 256;
     public final short SC_BLOCK_SIZE = Crypto.AES_BLOCK_SIZE;
     public final short INIT_AES_LEN = ((SecretStorageApplet.PIN_LENGTH +
-            SecretStorageApplet.PUK_LENGTH + SC_SECRET_LENGTH) / SC_BLOCK_SIZE + 1) *SC_BLOCK_SIZE;
+            SecretStorageApplet.PUK_LENGTH + SC_SECRET_LENGTH) / SC_BLOCK_SIZE + 1) * SC_BLOCK_SIZE;
     public final short INIT_FIX_LENGTH = INIT_AES_LEN + SC_BLOCK_SIZE;
 
     //P1 CONSTANTS
-    public final byte VERIFICATION_FIRST_STEP = 0;
-    public final byte VERIFICATION_SECOND_STEP = 1;
+    public final byte VERIFICATION_FIRST_STEP = 0x00;
+    public final byte VERIFICATION_SECOND_STEP = 0x01;
 
-    public SecureChannel(Crypto crypto) {
-        this.crypto = crypto;
+    public SecureChannel() {
+        crypto = new Crypto();
         scEncKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
                 KeyBuilder.LENGTH_AES_256, false);
         scMacKey = (AESKey) KeyBuilder.buildKey(KeyBuilder.TYPE_AES_TRANSIENT_DESELECT,
@@ -42,84 +45,85 @@ public class SecureChannel {
         secret_IV = JCSystem.makeTransientByteArray((short)(SC_SECRET_LENGTH * 2), JCSystem.CLEAR_ON_DESELECT);
         rand = JCSystem.makeTransientByteArray((short)(SC_SECRET_LENGTH * 2), JCSystem.CLEAR_ON_DESELECT);
         pairingSecret = new byte[SC_SECRET_LENGTH];
+        antiBug = JCSystem.makeTransientByteArray(MAX_RESPONSE_LENGTH, JCSystem.CLEAR_ON_DESELECT); // Needed to fix error - consultation
         scKeypair = new KeyPair(KeyPair.ALG_EC_FP, SC_KEY_LENGTH);
+        SecP256k1.setCurveParameters((ECKey) scKeypair.getPrivate());
+        SecP256k1.setCurveParameters((ECKey) scKeypair.getPublic());
         scKeypair.genKeyPair();
     }
 
-    public void decryptInit(byte[] apduBuffer) {
+    public void decryptInit(byte[] buffer) {
         crypto.ecdh.init(scKeypair.getPrivate());
-        short pk_len = (short) ((apduBuffer[ISO7816.OFFSET_LC] & 0xff) - INIT_FIX_LENGTH);
+        short pk_len = (short) ((buffer[ISO7816.OFFSET_LC] & 0xff) - INIT_FIX_LENGTH);
         short offset = ISO7816.OFFSET_CDATA;
         try {
-            crypto.ecdh.generateSecret(apduBuffer, offset, pk_len, secret_IV, (short) 0);
+            crypto.ecdh.generateSecret(buffer, offset, pk_len, secret_IV, (short) 0);
             offset += pk_len;
         } catch(Exception e) {
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
             return;
         }
         scEncKey.setKey(secret_IV, (short) 0);
-        crypto.aes.init(scEncKey, Cipher.MODE_DECRYPT, apduBuffer, offset, Crypto.AES_BLOCK_SIZE);
+        crypto.aes.init(scEncKey, Cipher.MODE_DECRYPT, buffer, offset, Crypto.AES_BLOCK_SIZE);
         offset += Crypto.AES_BLOCK_SIZE;
-        apduBuffer[ISO7816.OFFSET_LC] = (byte) crypto.aes.doFinal(apduBuffer, offset, INIT_AES_LEN,
-                apduBuffer, ISO7816.OFFSET_CDATA);
+        buffer[ISO7816.OFFSET_LC] = (byte) crypto.aes.doFinal(buffer, offset, INIT_AES_LEN,
+                buffer, ISO7816.OFFSET_CDATA);
     }
 
     public void initSC(byte[] buffer, short offset) {
         updatePairingSecret(buffer, offset);
     }
 
-    public void openSC(APDU apdu) {
+    public void openSC(APDU apdu, byte[] buffer) {
         scKeypair.genKeyPair();
         crypto.ecdh.init(scKeypair.getPrivate());
         authenticated = false;
-        byte[] apduBuffer = apdu.getBuffer();
         short length;
         try {
-             length = crypto.ecdh.generateSecret(apduBuffer, ISO7816.OFFSET_CDATA, apduBuffer[ISO7816.OFFSET_LC],
+             length = crypto.ecdh.generateSecret(buffer, ISO7816.OFFSET_CDATA, buffer[ISO7816.OFFSET_LC],
                      secret_IV, (short) 0);
         } catch (Exception e){
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
             return;
         }
-        crypto.random.nextBytes(apduBuffer, (short) 0, (short) (SC_SECRET_LENGTH + SC_BLOCK_SIZE));
+        crypto.random.generateData(buffer, (short) 0, (short) (SC_SECRET_LENGTH + SC_BLOCK_SIZE));
         crypto.sha512.update(secret_IV, (short) 0, length);
         crypto.sha512.update(pairingSecret, (short) 0, SC_SECRET_LENGTH);
-        crypto.sha512.doFinal(apduBuffer, (short) 0, SC_SECRET_LENGTH, secret_IV, (short) 0);
+        crypto.sha512.doFinal(buffer, (short) 0, SC_SECRET_LENGTH, secret_IV, (short) 0);
         scEncKey.setKey(secret_IV, (short) 0);
         scMacKey.setKey(secret_IV, SC_SECRET_LENGTH);
-        Util.arrayCopyNonAtomic(apduBuffer, SC_SECRET_LENGTH, secret_IV, (short) 0, SC_BLOCK_SIZE);
+        Util.arrayCopyNonAtomic(buffer, SC_SECRET_LENGTH, secret_IV, (short) 0, SC_BLOCK_SIZE);
         Util.arrayFillNonAtomic(secret_IV, SC_BLOCK_SIZE, (short) (2*SC_SECRET_LENGTH - SC_BLOCK_SIZE), (byte) 0); // fill zero
-        short pkLen = copyPublicKey(apduBuffer, (short) (SC_SECRET_LENGTH + SC_BLOCK_SIZE));
+        short pkLen = copyPublicKey(buffer, (short) (SC_SECRET_LENGTH + SC_BLOCK_SIZE));
         apdu.setOutgoingAndSend((short) 0, (short) (SC_SECRET_LENGTH + SC_BLOCK_SIZE + pkLen));
     }
 
-    public void verifyKeys(APDU apdu) {
+    public void verifyKeys(APDU apdu, byte[] buffer) {
         if (authenticated || !scEncKey.isInitialized() || !scMacKey.isInitialized()) {
             ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
         }
-        byte[] apduBuffer = apdu.getBuffer();
-        if (apduBuffer[ISO7816.OFFSET_P1] == VERIFICATION_FIRST_STEP) {
-            short len = verify_and_decrypt(apduBuffer);
+        if (buffer[ISO7816.OFFSET_P1] == VERIFICATION_FIRST_STEP) {
+            short len = verify_and_decrypt(buffer);
             if (len != SC_SECRET_LENGTH) {
                 reset();
                 ISOException.throwIt(ISO7816.SW_WRONG_DATA);
             }
-            Util.arrayCopy(apduBuffer, ISO7816.OFFSET_CDATA, rand, (short) 0, SC_SECRET_LENGTH);
-            crypto.random.nextBytes(rand, SC_SECRET_LENGTH, SC_SECRET_LENGTH);
-            Util.arrayCopy(rand, SC_SECRET_LENGTH, apduBuffer, (short) 0, SC_SECRET_LENGTH);
+            Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, rand, (short) 0, SC_SECRET_LENGTH);
+            crypto.random.generateData(rand, SC_SECRET_LENGTH, SC_SECRET_LENGTH);
+            Util.arrayCopy(rand, SC_SECRET_LENGTH, buffer, (short) 0, SC_SECRET_LENGTH);
             firstPhaseCompleted = true;
-            secureRespond(apdu, apduBuffer, SC_SECRET_LENGTH);
-        } else if (apduBuffer[ISO7816.OFFSET_P1] == VERIFICATION_SECOND_STEP && firstPhaseCompleted) {
-            if(apduBuffer[ISO7816.OFFSET_LC] != SC_SECRET_LENGTH) {
+            secureRespond(apdu, buffer, SC_SECRET_LENGTH);
+        } else if (buffer[ISO7816.OFFSET_P1] == VERIFICATION_SECOND_STEP && firstPhaseCompleted) {
+            if(buffer[ISO7816.OFFSET_LC] != SC_SECRET_LENGTH) {
                 reset();
                 ISOException.throwIt(ISO7816.SW_WRONG_DATA);
             }
-            byte challenge = Util.arrayCompare(apduBuffer, ISO7816.OFFSET_CDATA, rand, SC_SECRET_LENGTH, SC_SECRET_LENGTH);
+            byte challenge = Util.arrayCompare(buffer, ISO7816.OFFSET_CDATA, rand, SC_SECRET_LENGTH, SC_SECRET_LENGTH);
             if (challenge != 0) {
                 reset();
                 ISOException.throwIt(ISO7816.SW_DATA_INVALID);
             }
-            Util.arrayCopyNonAtomic(rand, (short) 0, apduBuffer, (short) 0, SC_SECRET_LENGTH);
+            Util.arrayCopyNonAtomic(rand, (short) 0, buffer, (short) 0, SC_SECRET_LENGTH);
             authenticated = true;
             apdu.setOutgoingAndSend((short) 0, SC_SECRET_LENGTH);
         } else {
@@ -164,7 +168,6 @@ public class SecureChannel {
 
     // Use this to send data over secure channel
     public void secureRespond(APDU apdu, byte[] apduBuffer, short len) {
-        byte[] antiBug = new byte[len + SC_BLOCK_SIZE]; // prevent aes implementation bug - need fix before deployment
         crypto.aes.init(scEncKey, Cipher.MODE_ENCRYPT, secret_IV, (short) 0, SC_BLOCK_SIZE);
         len = crypto.aes.doFinal(apduBuffer, (short) 0, len, antiBug,  (short) 0);
         computeMAC(len, apduBuffer, antiBug);
@@ -179,6 +182,20 @@ public class SecureChannel {
         crypto.mac.sign(buffer, (short) 0, len, apduBuffer, (short) 0);
     }
 
+/*    public void secureRespond(APDU apdu, byte[] buffer, short len) {
+        crypto.aes.init(scEncKey, Cipher.MODE_ENCRYPT, secret_IV, (short) 0, SC_BLOCK_SIZE);
+        len = crypto.aes.doFinal(buffer, (short) 0, len, buffer, SC_BLOCK_SIZE);
+        computeMAC(buffer, len);
+        Util.arrayCopyNonAtomic(buffer, (short) 0, secret_IV, (short) 0, SC_BLOCK_SIZE);
+        len += SC_BLOCK_SIZE;
+        apdu.setOutgoingAndSend((short) 0, len);
+    }
+
+    private void computeMAC(byte[] buffer, short len) {
+        crypto.mac.init(scMacKey, Signature.MODE_SIGN);
+        crypto.mac.sign(buffer, SC_BLOCK_SIZE, len, buffer, (short) 0);
+    }*/
+
     public short copyPublicKey(byte[] buf, short off) {
         ECPublicKey pk = (ECPublicKey) scKeypair.getPublic();
         return pk.getW(buf, off);
@@ -191,7 +208,6 @@ public class SecureChannel {
     public void reset() {
         scEncKey.clearKey();
         scMacKey.clearKey();
-        Util.arrayFillNonAtomic(rand, (short) 0, (short) (2 * SC_BLOCK_SIZE), (byte) 0);
         authenticated = false;
         firstPhaseCompleted = false;
         scKeypair.genKeyPair();

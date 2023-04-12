@@ -1,12 +1,15 @@
 package main;
 
 import javacard.framework.ISO7816;
+import javacard.framework.Util;
 import javacard.security.Signature;
 
 import javax.smartcardio.CommandAPDU;
 import javax.smartcardio.ResponseAPDU;
+import java.lang.reflect.Array;
 import java.security.DigestException;
 import java.util.Arrays;
+import java.util.Base64;
 
 public class SecureChannel {
 
@@ -44,7 +47,7 @@ public class SecureChannel {
         }
         CommandAPDU commandAPDU = new CommandAPDU(0x00, Const.INS_VERIFY_KEYS, 0x01, 0x00, responseData,
                 (short) 0, length);
-        response = Run.simulator.transmitCommand(commandAPDU);
+        response = Run.transmit(commandAPDU);
         if (!Arrays.equals(response.getData(), challengeResponse)) {
             reset();
             return false;
@@ -53,8 +56,8 @@ public class SecureChannel {
     }
 
     //USE THIS TO RESPOND BY SECURE CHANNEL
-    public ResponseAPDU secureRespond(byte[] input, short len, byte instruction, byte P1, byte P2) {
-        int cipher_len = (short) (((len + 1) / Const.AES_BLOCK_SIZE + 1) * Const.AES_BLOCK_SIZE);
+    public ResponseAPDU secureRespond(byte[] input, int len, byte instruction, byte P1, byte P2) {
+        int cipher_len = ((len + 1) / Const.AES_BLOCK_SIZE + 1) * Const.AES_BLOCK_SIZE;
         byte[] request = new byte[ISO7816.OFFSET_CDATA + Const.AES_BLOCK_SIZE + cipher_len];
         try {
             cipher_len = crypto.encrypt(input, 0, len, request,
@@ -69,16 +72,11 @@ public class SecureChannel {
         request[4] = (byte) (cipher_len + Const.AES_BLOCK_SIZE);
         computeMAC(request, cipher_len);
         System.arraycopy(request, ISO7816.OFFSET_CDATA, secret_IV, 0, Const.SC_BLOCK_SIZE);
-        CommandAPDU commandAPDU;
-        try {
-             commandAPDU = new CommandAPDU(request, (short) 0, request.length);
-        }catch (Exception e) {
-            return null;
-        }
-        return Run.simulator.transmitCommand(commandAPDU);
+        CommandAPDU commandAPDU = new CommandAPDU(request, (short) 0, request.length);
+        return Run.transmit(commandAPDU);
     }
 
-    public short computeMAC(byte[] buffer, int len) {
+    private short computeMAC(byte[] buffer, int len) {
         crypto.mac.init(crypto.scMacKey, Signature.MODE_SIGN);
         crypto.mac.update(buffer, (short) 0, ISO7816.OFFSET_CDATA);
         crypto.mac.update(secret_IV, Const.SC_BLOCK_SIZE, (short) (Const.SC_BLOCK_SIZE - ISO7816.OFFSET_CDATA)); // zero padding
@@ -103,7 +101,7 @@ public class SecureChannel {
         }
     }
 
-    public boolean verifyMAC(byte[] buffer, short len) {
+    private boolean verifyMAC(byte[] buffer, short len) {
         crypto.mac.init(crypto.scMacKey, Signature.MODE_VERIFY);
         return crypto.mac.verify(buffer, Const.AES_BLOCK_SIZE, (short) (len - Const.AES_BLOCK_SIZE),
                 buffer, (short) 0, Const.AES_BLOCK_SIZE);
@@ -114,15 +112,11 @@ public class SecureChannel {
         crypto.genKeyPair();
         crypto.exportKey(request_data, 0);
         CommandAPDU commandAPDU = new CommandAPDU(0x00, Const.INS_OPEN_SC, 0x00, 0x00, request_data);
-        ResponseAPDU responseAPDU = Run.simulator.transmitCommand(commandAPDU);
+        ResponseAPDU responseAPDU = Run.transmit(commandAPDU);
         byte[] response = responseAPDU.getData();
         int length;
-        try {
-            length = crypto.generateSecret(response, Const.AES_BLOCK_SIZE + Const.SC_SECRET_LENGTH, secret_IV,
+        length = crypto.generateSecret(response, Const.AES_BLOCK_SIZE + Const.SC_SECRET_LENGTH, secret_IV,
                     0);
-        } catch (Exception e){
-            throw new RuntimeException();
-        }
         crypto.sha512.update(secret_IV, 0, length);
         crypto.sha512.update(pairingSecret, 0, Const.SC_SECRET_LENGTH);
         crypto.sha512.update(response, 0, Const.SC_SECRET_LENGTH);
@@ -135,22 +129,25 @@ public class SecureChannel {
         scOpened = true;
     }
 
-    public ResponseAPDU initialize(byte[] response) throws Exception {
+    public ResponseAPDU initialize(byte[] response) {
         byte[] data_to_encrypt = new byte[Const.INIT_ENC_LEN];
         crypto.generateSecret(response, 1, secret_IV, 0);
         byte[] request_data = new byte[Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE + Const.INIT_AES_LEN];
         crypto.exportKey(request_data, 0);
-        System.arraycopy(UserInterface.getPin(false), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
-        System.arraycopy(UserInterface.getPuk(false), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
+        System.arraycopy(UserInterface.getPin(), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
+        System.arraycopy(UserInterface.getPuk(), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
         crypto.genBytes(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
-        crypto.sha256.update(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
-        crypto.sha256.digest(pairingSecret, 0, 32);
+        changePS(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.genBytes(request_data, Const.EC_KEY_LEN, Const.AES_BLOCK_SIZE);
         crypto.setEncKey(secret_IV, (short) 0);
-        crypto.encrypt(data_to_encrypt, 0, Const.INIT_ENC_LEN, request_data,
-                Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE, request_data, Const.EC_KEY_LEN);
+        try {
+            crypto.encrypt(data_to_encrypt, 0, Const.INIT_ENC_LEN, request_data,
+                    Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE, request_data, Const.EC_KEY_LEN);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to encrypt data");
+        }
         CommandAPDU commandAPDU = new CommandAPDU(0x00, Const.INS_INIT, 0x00, 0x00, request_data);
-        return Run.simulator.transmitCommand(commandAPDU);
+        return Run.transmit(commandAPDU);
     }
 
     public char getState() {
@@ -167,16 +164,14 @@ public class SecureChannel {
     }
 
     public void changePS(byte[] buffer, int off, int len) {
+        System.out.print("Current pairing secret (before hashing in Base64):");
+        System.out.println(UserInterface.outputPS(buffer, off, len));
         crypto.sha256.update(buffer, off, len);
         try {
-            crypto.sha256.digest(pairingSecret, 0, 32);
+            crypto.sha256.digest(pairingSecret, 0, Const.SC_SECRET_LENGTH);
         } catch (Exception e) {
             System.out.println("Digest error");
-            return;
         }
-        System.out.println("New pairing secret:");
-        System.out.println(Arrays.toString(pairingSecret));
-        reset();
     }
 
     public boolean isOpened() {

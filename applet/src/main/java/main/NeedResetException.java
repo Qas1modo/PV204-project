@@ -5,7 +5,6 @@ public class NeedResetException extends Exception{
 
     public NeedResetException() {
     }
-
     public NeedResetException(boolean pairingRemoved) {
         this.pairingRemoved = pairingRemoved;
     }
