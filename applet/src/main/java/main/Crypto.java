@@ -37,7 +37,7 @@ public class Crypto {
             SecP256k1.setCurveParameters((ECKey) scKeypair.getPublic());
             scKeypair.genKeyPair();
         } catch (Exception e) {
-            throw new RuntimeException();
+            throw new RuntimeException("Error during initialization of cryptography module!");
         }
     }
 

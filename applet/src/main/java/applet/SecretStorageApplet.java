@@ -296,9 +296,15 @@ public class SecretStorageApplet extends Applet {
         if (len != (PUK_LENGTH + PIN_LENGTH) || !allDigits(buffer, ISO7816.OFFSET_CDATA, len)) {
             ISOException.throwIt(ISO7816.SW_WRONG_DATA);
         }
+        JCSystem.beginTransaction();
         if (!puk.check(buffer, ISO7816.OFFSET_CDATA, PUK_LENGTH)) {
+            if (puk.getTriesRemaining() == 0) {
+                removeSensitiveData();
+            }
+            JCSystem.commitTransaction();
             ISOException.throwIt((short) (SW_INVALID_PASSWORD + puk.getTriesRemaining()));
         }
+        JCSystem.commitTransaction();
         pin.update(buffer, (short) (ISO7816.OFFSET_CDATA + PUK_LENGTH), PIN_LENGTH);
         pin.check(buffer, (short) (ISO7816.OFFSET_CDATA + PUK_LENGTH), PIN_LENGTH);
         puk.reset();
@@ -331,9 +337,7 @@ public class SecretStorageApplet extends Applet {
             ISOException.throwIt((short) (SW_INVALID_PASSWORD + pin.getTriesRemaining()));
         }
         JCSystem.beginTransaction();
-        Util.arrayFillNonAtomic(secretNames, (short) (MAX_SECRETS * NAME_STORAGE), NAME_STORAGE, (byte) 0x00);
-        Util.arrayFillNonAtomic(secretValues, (short) (MAX_SECRETS * SECRET_STORAGE), SECRET_STORAGE, (byte) 0x00);
-        secretCount = 0;
+        removeSensitiveData();
         sc.removePairingSecret();
         initialized = false;
         sc.reset();
@@ -409,6 +413,12 @@ public class SecretStorageApplet extends Applet {
             }
         }
         return secretCount;
+    }
+
+    private void removeSensitiveData() {
+        Util.arrayFillNonAtomic(secretNames, (short) (MAX_SECRETS * NAME_STORAGE), NAME_STORAGE, (byte) 0x00);
+        Util.arrayFillNonAtomic(secretValues, (short) (MAX_SECRETS * SECRET_STORAGE), SECRET_STORAGE, (byte) 0x00);
+        secretCount = 0;
     }
 
     private short findSecretByName(byte[] buffer) {

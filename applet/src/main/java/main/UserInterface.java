@@ -8,7 +8,6 @@ import java.util.Base64;
 public class UserInterface {
     private final SecretStorageAPDU apdu;
     private final SecureChannel sc;
-
     private static final String FILENAME = "secret.txt";
     public UserInterface(SecretStorageAPDU apdu) {
         this.apdu = apdu;
@@ -20,18 +19,17 @@ public class UserInterface {
         apdu.selectApp(true);
         while (true)
         {
-            do{
-                try {
-                    sc.openSc();
-                } catch (DigestException e) {
-                    System.out.println("Failed to open secure channel, exiting...");
-                    return;
-                }
-                secureChannelOpened = sc.verifySc();
-                if (!secureChannelOpened) {
-                    System.out.println("Failed to verify secure channel, retrying...");
-                }
-            } while (!secureChannelOpened);
+            try {
+                sc.openSc();
+            } catch (DigestException e) {
+                System.out.println("Failed to open secure channel, exiting...");
+                return;
+            }
+            secureChannelOpened = sc.verifySc();
+            if (!secureChannelOpened) {
+                System.out.println("Failed to verify secure channel, exiting...");
+                return;
+            }
             if (!parseInput()) {
                 return;
             }
@@ -60,8 +58,6 @@ public class UserInterface {
                     }
                 }
                 break;
-            } catch (NumberFormatException e){
-                System.err.println("Not a number!");
             }
         }
         System.out.println("Secure channel destroyed, proceeding to reinitialization!");
@@ -81,16 +77,15 @@ public class UserInterface {
                 }
                 System.exit(0);
             case 1:
-                showLegend();
-                return true;
+                return showLegend();
             case 2:
                 return apdu.verifyPin();
             case 3:
                 return apdu.showStatus();
             case 4:
-                return apdu.storeSecret(false);
-            case 5:
                 return apdu.listNames();
+            case 5:
+                return apdu.storeSecret();
             case 6:
                 return apdu.showSecret(false);
             case 7:
@@ -116,38 +111,33 @@ public class UserInterface {
             case 14:
                 sc.reset();
                 throw new NeedResetException();
-            case 15:
-                return apdu.storeSecret(true);
             default:
                 System.err.println("Invalid command!");
                 return false;
         }
     }
 
-    private void showLegend() {
-        System.out.println("Type 0 to exit!");
-        System.out.println("Type 1 to show this menu!");
-        System.out.println("Type 2 to verify PIN!");
-        System.out.println("Type 3 to show status!");
-        System.out.println("Type 4 to store secret!");
-        System.out.println("Type 5 to list secrets!");
-        System.out.println("Type 6 to show specific secret in UTF8!");
-        System.out.println("Type 7 to show specific secret in byte array!");
-        System.out.println("Type 8 to remove secret!");
-        System.out.println("Type 9 to unblock PIN!");
-        System.out.println("Type 10 to change PIN!");
-        System.out.println("Type 11 to change PUK!");
-        System.out.println("Type 12 to change pairing secret (resets SC)!");
-        System.out.println("Type 13 to remove pairing secret (resets SC)!");
-        System.out.println("Type 14 to reset SC!");
-        System.out.println("Type 15 to create random secret (for testing)!");
+    private boolean showLegend() {
+        System.out.println("Type 0 to exit");
+        System.out.println("Type 1 to show this menu");
+        System.out.println("Type 2 to verify PIN");
+        System.out.println("Type 3 to show status");
+        System.out.println("Type 4 to list secrets");
+        System.out.println("Type 5 to store secret");
+        System.out.println("Type 6 to show specific secret in UTF8");
+        System.out.println("Type 7 to show specific secret in byte array");
+        System.out.println("Type 8 to remove secret");
+        System.out.println("Type 9 to unblock PIN");
+        System.out.println("Type 10 to change PIN");
+        System.out.println("Type 11 to change PUK");
+        System.out.println("Type 12 to change pairing secret (resets SC)");
+        System.out.println("Type 13 to remove pairing secret (resets SC)");
+        System.out.println("Type 14 to reset SC");
+        return true;
     }
 
 
-    public static byte[] getPin(boolean ret_stat) {
-        if (ret_stat) {
-            return new byte[]{0x30, 0x30, 0x30, 0x30, 0x30, 0x30};
-        }
+    public static byte[] getPin() {
         System.out.print("Enter PIN:");
         byte[] pin = readLine(Const.PIN_LENGTH);
         while (pin == null || pin.length != Const.PIN_LENGTH || !allDigits(pin, pin.length)) {
@@ -158,10 +148,7 @@ public class UserInterface {
         return pin;
     }
 
-    public static byte[] getPuk(boolean ret_stat) {
-        if (ret_stat) {
-            return new byte[]{0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39};
-        }
+    public static byte[] getPuk() {
         System.out.print("Enter PUK:");
         byte[] puk = readLine(Const.PUK_LENGTH);
         while (puk == null || puk.length != Const.PUK_LENGTH || !allDigits(puk, puk.length)) {

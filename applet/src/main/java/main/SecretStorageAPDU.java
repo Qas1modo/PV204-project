@@ -36,7 +36,7 @@ public class SecretStorageAPDU {
 
     private void confirmation(String operation, byte[] buffer, int offset) {
         System.out.printf("Confirm operation %s by providing correct PIN%n", operation);
-        byte[] pin = UserInterface.getPin(false);
+        byte[] pin = UserInterface.getPin();
         System.arraycopy(pin, 0, buffer, offset, Const.PIN_LENGTH);
     }
 
@@ -136,22 +136,13 @@ public class SecretStorageAPDU {
         return false;
     }
 
-    public boolean storeSecret(boolean fill){
+    public boolean storeSecret(){
         if (!checkPrerequisites(true, true, false, true)) {
             return false;
         }
         byte[] request = new byte[Const.MAX_NAME_LENGTH + Const.MAX_SECRET_LENGTH + 2];
-        byte[] secretName;
-        byte[] secret;
-        if (fill) {
-            secretName = new byte[Const.MAX_NAME_LENGTH];
-            sc.crypto.genBytes(secretName, 0, Const.MAX_NAME_LENGTH);
-            secret = new byte[Const.MAX_SECRET_LENGTH];
-            sc.crypto.genBytes(secret, 0, Const.MAX_SECRET_LENGTH);
-        } else {
-            secretName = getInput("Secret name:", Const.MAX_NAME_LENGTH);
-            secret = getInput("Secret:", Const.MAX_SECRET_LENGTH);
-        }
+        byte[] secretName = getInput("Secret name:", Const.MAX_NAME_LENGTH);
+        byte[] secret = getInput("Secret:", Const.MAX_SECRET_LENGTH);
         request[0] = (byte) secretName.length;
         System.arraycopy(secretName, 0, request, 1, secretName.length);
         request[secretName.length + 1] = (byte) secret.length;
@@ -221,7 +212,7 @@ public class SecretStorageAPDU {
                 }
                 break;
             }
-            nextPage -= 1;
+            nextPage -= 1; // Indexing from zero
             response = sc.secureRespond(new byte[0], 0, Const.INS_LIST, nextPage, (byte) 0);
         }
         return true;
@@ -270,7 +261,7 @@ public class SecretStorageAPDU {
                     response.getSW2() - 0xc0);
             return false;
         }
-        if (response.getSW1() != 0x90) {
+        if ((short) response.getSW() != ISO7816.SW_NO_ERROR) {
             System.err.println("Unpairing cannot be performed!");
             return false;
         }
@@ -289,7 +280,7 @@ public class SecretStorageAPDU {
                 out = new byte[2*Const.PIN_LENGTH];
                 confirmation("CHANGE_PIN", out, 0);
                 System.out.println("Enter new PIN");
-                byte[] pin = UserInterface.getPin(false);
+                byte[] pin = UserInterface.getPin();
                 System.arraycopy(pin, 0, out, Const.PIN_LENGTH, Const.PIN_LENGTH);
                 response = sc.secureRespond(out, out.length, Const.INS_CHANGE_PIN,
                         Const.CHANGE_PIN, (byte)0x00);
@@ -301,7 +292,7 @@ public class SecretStorageAPDU {
                 out = new byte[Const.PIN_LENGTH + Const.PUK_LENGTH];
                 confirmation("CHANGE_PUK", out, 0);
                 System.out.println("Enter new PUK");
-                byte[] puk = UserInterface.getPuk(false);
+                byte[] puk = UserInterface.getPuk();
                 System.arraycopy(puk, 0, out, Const.PIN_LENGTH, Const.PUK_LENGTH);
                 response = sc.secureRespond(out, out.length, Const.INS_CHANGE_PIN,
                         Const.CHANGE_PUK, (byte)0x00);
@@ -340,9 +331,9 @@ public class SecretStorageAPDU {
         int attemptsRemaining;
         byte[] data;
         do{
-            byte[] puk = UserInterface.getPuk(false);
+            byte[] puk = UserInterface.getPuk();
             System.out.println("Enter new PIN:");
-            byte[] pin = UserInterface.getPin(false);
+            byte[] pin = UserInterface.getPin();
             request = Arrays.copyOf(puk,  puk.length + pin.length);
             System.arraycopy(pin, 0, request, puk.length, pin.length);
             response = sc.secureRespond(request, request.length, Const.INS_UNBLOCK_PIN,
@@ -374,7 +365,7 @@ public class SecretStorageAPDU {
             return false;
         }
         ResponseAPDU response;
-        byte[] pin = UserInterface.getPin(false);
+        byte[] pin = UserInterface.getPin();
         response = sc.secureRespond(pin, pin.length, Const.INS_VERIFY_PIN,
                 (byte)0x00, (byte)0x00);
         if (validPin(response)) {

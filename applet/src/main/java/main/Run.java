@@ -9,7 +9,7 @@ import javax.smartcardio.*;
 import javax.smartcardio.CardException;
 
 public class Run {
-    private static CardTerminal cardTerminal;
+    private static CardTerminal cardTerminal = null;
     private static CardChannel channel = null;
     public static final CardSimulator simulator = new CardSimulator();
     public static final AID appletAID = AIDUtil.create("F000000001");
@@ -37,7 +37,7 @@ public class Run {
                 }
             }
             if (cardTerminal == null){
-                System.out.println("No card connected !");
+                System.out.println("No card connected!");
                 return false;
             }
         Card card = cardTerminal.connect("*");

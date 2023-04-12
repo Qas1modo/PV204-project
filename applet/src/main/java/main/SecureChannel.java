@@ -76,7 +76,7 @@ public class SecureChannel {
         return Run.transmit(commandAPDU);
     }
 
-    public short computeMAC(byte[] buffer, int len) {
+    private short computeMAC(byte[] buffer, int len) {
         crypto.mac.init(crypto.scMacKey, Signature.MODE_SIGN);
         crypto.mac.update(buffer, (short) 0, ISO7816.OFFSET_CDATA);
         crypto.mac.update(secret_IV, Const.SC_BLOCK_SIZE, (short) (Const.SC_BLOCK_SIZE - ISO7816.OFFSET_CDATA)); // zero padding
@@ -101,7 +101,7 @@ public class SecureChannel {
         }
     }
 
-    public boolean verifyMAC(byte[] buffer, short len) {
+    private boolean verifyMAC(byte[] buffer, short len) {
         crypto.mac.init(crypto.scMacKey, Signature.MODE_VERIFY);
         return crypto.mac.verify(buffer, Const.AES_BLOCK_SIZE, (short) (len - Const.AES_BLOCK_SIZE),
                 buffer, (short) 0, Const.AES_BLOCK_SIZE);
@@ -134,8 +134,8 @@ public class SecureChannel {
         crypto.generateSecret(response, 1, secret_IV, 0);
         byte[] request_data = new byte[Const.EC_KEY_LEN + Const.AES_BLOCK_SIZE + Const.INIT_AES_LEN];
         crypto.exportKey(request_data, 0);
-        System.arraycopy(UserInterface.getPin(true), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
-        System.arraycopy(UserInterface.getPuk(true), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
+        System.arraycopy(UserInterface.getPin(), 0, data_to_encrypt, 0, Const.PIN_LENGTH);
+        System.arraycopy(UserInterface.getPuk(), 0, data_to_encrypt, Const.PIN_LENGTH, Const.PUK_LENGTH);
         crypto.genBytes(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         changePS(data_to_encrypt, Const.PIN_LENGTH + Const.PUK_LENGTH, Const.SC_SECRET_LENGTH);
         crypto.genBytes(request_data, Const.EC_KEY_LEN, Const.AES_BLOCK_SIZE);
@@ -164,7 +164,7 @@ public class SecureChannel {
     }
 
     public void changePS(byte[] buffer, int off, int len) {
-        System.out.print("Pairing secret (before hashing in Base64):");
+        System.out.print("Current pairing secret (before hashing in Base64):");
         System.out.println(UserInterface.outputPS(buffer, off, len));
         crypto.sha256.update(buffer, off, len);
         try {

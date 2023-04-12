@@ -29,12 +29,12 @@ public class SecureChannel {
     public final short SC_KEY_LENGTH = 256;
     public final short SC_BLOCK_SIZE = Crypto.AES_BLOCK_SIZE;
     public final short INIT_AES_LEN = ((SecretStorageApplet.PIN_LENGTH +
-            SecretStorageApplet.PUK_LENGTH + SC_SECRET_LENGTH) / SC_BLOCK_SIZE + 1) *SC_BLOCK_SIZE;
+            SecretStorageApplet.PUK_LENGTH + SC_SECRET_LENGTH) / SC_BLOCK_SIZE + 1) * SC_BLOCK_SIZE;
     public final short INIT_FIX_LENGTH = INIT_AES_LEN + SC_BLOCK_SIZE;
 
     //P1 CONSTANTS
-    public final byte VERIFICATION_FIRST_STEP = 0;
-    public final byte VERIFICATION_SECOND_STEP = 1;
+    public final byte VERIFICATION_FIRST_STEP = 0x00;
+    public final byte VERIFICATION_SECOND_STEP = 0x01;
 
     public SecureChannel() {
         crypto = new Crypto();
@@ -45,7 +45,7 @@ public class SecureChannel {
         secret_IV = JCSystem.makeTransientByteArray((short)(SC_SECRET_LENGTH * 2), JCSystem.CLEAR_ON_DESELECT);
         rand = JCSystem.makeTransientByteArray((short)(SC_SECRET_LENGTH * 2), JCSystem.CLEAR_ON_DESELECT);
         pairingSecret = new byte[SC_SECRET_LENGTH];
-        antiBug = JCSystem.makeTransientByteArray(MAX_RESPONSE_LENGTH, JCSystem.CLEAR_ON_DESELECT); // Need to fix error - consultation
+        antiBug = JCSystem.makeTransientByteArray(MAX_RESPONSE_LENGTH, JCSystem.CLEAR_ON_DESELECT); // Needed to fix error - consultation
         scKeypair = new KeyPair(KeyPair.ALG_EC_FP, SC_KEY_LENGTH);
         SecP256k1.setCurveParameters((ECKey) scKeypair.getPrivate());
         SecP256k1.setCurveParameters((ECKey) scKeypair.getPublic());
