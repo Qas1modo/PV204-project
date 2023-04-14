@@ -13,7 +13,7 @@ public class Run {
     private static CardChannel channel = null;
     public static final CardSimulator simulator = new CardSimulator();
     public static final AID appletAID = AIDUtil.create("F000000001");
-    public static boolean inSimulator = false;
+    public static boolean inSimulator = true;
 
     public static final byte[] APPLET_ID = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x01, 0x02};
     public static void main(String[] args){

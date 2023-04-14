@@ -1,5 +1,6 @@
 package tests;
 
+import applet.SecretStorageApplet;
 import cardTools.CardManager;
 import cardTools.CardType;
 import cardTools.RunConfig;
@@ -17,7 +18,7 @@ import java.util.ArrayList;
  * @author Petr Svenda, Dusan Klinec (ph4r05)
  */
 public class BaseTest {
-    private static String APPLET_AID = "01ffff0405060708090102";
+    private static String APPLET_AID = "0102030405060708090102";
     private static byte APPLET_AID_BYTE[] = Util.hexStringToByteArray(APPLET_AID);
 
     protected CardType cardType = CardType.JCARDSIMLOCAL;
@@ -74,8 +75,8 @@ public class BaseTest {
             runCfg.setAid(APPLET_AID_BYTE);  // performs select after connect
 
         } else if (cardType != CardType.PHYSICAL && cardType != CardType.PHYSICAL_JAVAX) {
-            // Running in the simulator
-            runCfg.setAppletToSimulate(MainApplet.class)
+            //Running in the simulator
+            runCfg.setAppletToSimulate(SecretStorageApplet.class)
                     .setTestCardType(CardType.JCARDSIMLOCAL)
                     .setbReuploadApplet(true)
                     .setInstallData(installData);
