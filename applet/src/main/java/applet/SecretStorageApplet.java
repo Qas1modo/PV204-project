@@ -313,7 +313,9 @@ public class SecretStorageApplet extends Applet {
     }
 
     public void status(APDU apdu, byte[] buffer) {
-        sc.processAPDU(buffer);
+        if (sc.isOpen()) {
+            sc.processAPDU(buffer);
+        }
         buffer[0] = pin.isValidated() ? (byte) 0x01 : (byte) 0x02;
         buffer[1] = pin.getTriesRemaining();
         buffer[2] = puk.getTriesRemaining();
@@ -322,7 +324,11 @@ public class SecretStorageApplet extends Applet {
         buffer[5] = sc.authenticated ? (byte) 0x01 : (byte) 0x02;
         buffer[6] = secretCount;
         buffer[7] = MAX_SECRETS;
-        sc.secureRespond(apdu, buffer, STATUS_LEN);
+        if (sc.isOpen()){
+            sc.secureRespond(apdu, buffer, STATUS_LEN);
+        } else {
+            apdu.setOutgoingAndSend((short) 0, STATUS_LEN);
+        }
     }
 
     public void unpair(byte[] buffer) {
