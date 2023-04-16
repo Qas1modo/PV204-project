@@ -29,7 +29,7 @@ public class Const {
     public final static byte EC_KEY_LEN = 65;
     public final static byte STATUS_LEN = 8;
 
-    public final static byte PS_LEN = 45;
+    public final static byte PS_LEN = 44;
 
     //RETURN VALUES
     public final static byte RET_NOT_INIT = (byte) 0xa0;

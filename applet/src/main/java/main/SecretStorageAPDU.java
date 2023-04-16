@@ -278,7 +278,7 @@ public class SecretStorageAPDU {
         switch (P1) {
             case Const.CHANGE_PIN:
                 out = new byte[2*Const.PIN_LENGTH];
-                confirmation("CHANGE_PIN", out, 0);
+                confirmation("NEW_PIN", out, 0);
                 System.out.println("Enter new PIN");
                 byte[] pin = UserInterface.getPin();
                 System.arraycopy(pin, 0, out, Const.PIN_LENGTH, Const.PIN_LENGTH);
@@ -290,7 +290,7 @@ public class SecretStorageAPDU {
                 break;
             case Const.CHANGE_PUK:
                 out = new byte[Const.PIN_LENGTH + Const.PUK_LENGTH];
-                confirmation("CHANGE_PUK", out, 0);
+                confirmation("NEW_PUK", out, 0);
                 System.out.println("Enter new PUK");
                 byte[] puk = UserInterface.getPuk();
                 System.arraycopy(puk, 0, out, Const.PIN_LENGTH, Const.PUK_LENGTH);
@@ -302,7 +302,7 @@ public class SecretStorageAPDU {
                 break;
             case Const.CHANGE_PAIRING_SECRET:
                 byte[] ps = new byte[Const.SC_SECRET_LENGTH + Const.PIN_LENGTH];
-                confirmation("CHANGE_PAIRING_SECRET", ps, 0);
+                confirmation("NEW_PAIRING_SECRET", ps, 0);
                 sc.crypto.genBytes(ps, Const.PIN_LENGTH, Const.SC_SECRET_LENGTH);
                 response = sc.secureRespond(ps, ps.length, Const.INS_CHANGE_PIN,
                         Const.CHANGE_PAIRING_SECRET, (byte)0x00);
