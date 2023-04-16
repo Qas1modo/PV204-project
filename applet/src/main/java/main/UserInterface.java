@@ -117,24 +117,6 @@ public class UserInterface {
         }
     }
 
-    private boolean showLegend() {
-        System.out.println("Type 0 to exit");
-        System.out.println("Type 1 to show this menu");
-        System.out.println("Type 2 to verify PIN");
-        System.out.println("Type 3 to show status");
-        System.out.println("Type 4 to list secrets");
-        System.out.println("Type 5 to store secret");
-        System.out.println("Type 6 to show specific secret in UTF8");
-        System.out.println("Type 7 to show specific secret in byte array");
-        System.out.println("Type 8 to remove secret");
-        System.out.println("Type 9 to unblock PIN");
-        System.out.println("Type 10 to change PIN");
-        System.out.println("Type 11 to change PUK");
-        System.out.println("Type 12 to change pairing secret (resets SC)");
-        System.out.println("Type 13 to remove pairing secret (resets SC)");
-        System.out.println("Type 14 to reset SC");
-        return true;
-    }
 
 
     public static byte[] getPin() {
@@ -147,7 +129,28 @@ public class UserInterface {
         }
         return pin;
     }
+    private boolean showLegend() {
+        System.out.println("Type 0 to exit");
+        System.out.println("Type 1 to show this menu");
+        System.out.println("Type 2 to verify PIN");
+        System.out.println("Type 3 to show status");
+        System.out.println("Type 4 to list secrets");
 
+        if (sc.isPinVerified()) {
+            System.out.println("Type 5 to store secret");
+            System.out.println("Type 6 to show specific secret in UTF8");
+            System.out.println("Type 7 to show specific secret in byte array");
+            System.out.println("Type 8 to remove secret");
+            System.out.println("Type 9 to unblock PIN");
+            System.out.println("Type 10 to change PIN");
+            System.out.println("Type 11 to change PUK");
+            System.out.println("Type 12 to change pairing secret (resets SC)");
+            System.out.println("Type 13 to remove pairing secret (resets SC)");
+            System.out.println("Type 14 to reset SC");
+        }
+
+        return true;
+    }
     public static byte[] getPuk() {
         System.out.print("Enter PUK:");
         byte[] puk = readLine(Const.PUK_LENGTH);
