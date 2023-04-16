@@ -8,7 +8,7 @@ import javacard.framework.*;
 import javax.smartcardio.*;
 import javax.smartcardio.CardException;
 
-public class Run {
+public class  Run {
     private static CardTerminal cardTerminal = null;
     private static CardChannel channel = null;
     public static final CardSimulator simulator = new CardSimulator();
