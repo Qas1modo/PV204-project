@@ -27,7 +27,9 @@ public class Const {
 
     //CONSTANTS
     public final static byte EC_KEY_LEN = 65;
-    public static final byte STATUS_LEN = 8;
+    public final static byte STATUS_LEN = 8;
+
+    public final static byte PS_LEN = 45;
 
     //RETURN VALUES
     public final static byte RET_NOT_INIT = (byte) 0xa0;
@@ -46,7 +48,7 @@ public class Const {
     public final static short INIT_AES_LEN = (INIT_ENC_LEN / SC_BLOCK_SIZE + 1) * SC_BLOCK_SIZE;
 
     // UI constants
-    public final static int COMMAND_MAX_LEN = 3;
+    public final static int COMMAND_MAX_LEN = 7;
     public final static short SW_STORAGE_FULL = (short) 0x6A84;
     public final static short SW_VALUE_ALREADY_PRESENT = (short) 0x6A85;
 }

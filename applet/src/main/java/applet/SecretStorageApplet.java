@@ -416,8 +416,8 @@ public class SecretStorageApplet extends Applet {
     }
 
     private void removeSensitiveData() {
-        Util.arrayFillNonAtomic(secretNames, (short) (MAX_SECRETS * NAME_STORAGE), NAME_STORAGE, (byte) 0x00);
-        Util.arrayFillNonAtomic(secretValues, (short) (MAX_SECRETS * SECRET_STORAGE), SECRET_STORAGE, (byte) 0x00);
+        Util.arrayFillNonAtomic(secretNames, (short) 0, (short) (MAX_SECRETS * NAME_STORAGE), (byte) 0x00);
+        Util.arrayFillNonAtomic(secretValues, (short) 0, (short) (MAX_SECRETS * SECRET_STORAGE), (byte) 0x00);
         secretCount = 0;
     }
 

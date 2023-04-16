@@ -38,16 +38,14 @@ public class UserInterface {
 
     public boolean parseInput() {
         while (true) {
-            System.out.printf("Command number (1 to show available commands)[%c]:", sc.getState());
+            System.out.printf("Command ([help] to show available commands)[%c]:", sc.getState());
             byte[] command = readLine(Const.COMMAND_MAX_LEN);
-            if (command == null || !allDigits(command, command.length)) {
-                System.out.println("Invalid input, only numbers between 0 and 999 are allowed");
+            if (command == null) {
+                System.out.println("Invalid or too long input!");
                 continue;
             }
             try {
-                if (!callCommand(Integer.parseInt(new String(command)))) {
-                    System.out.println("Command did not finish successfully");
-                }
+                callCommand(new String(command));
             } catch (NeedResetException e){
                 if (e.pairingRemoved) {
                     System.out.print("Successfully unpaired, pair again ? (type 0 to exit):");
@@ -58,6 +56,8 @@ public class UserInterface {
                     }
                 }
                 break;
+            } catch (Exception e) {
+                System.out.println("Command did not finish successfully!");
             }
         }
         System.out.println("Secure channel destroyed, proceeding to reinitialization!");
@@ -66,58 +66,81 @@ public class UserInterface {
     }
 
     //Add new methods here to call APDU operations
-    private boolean callCommand(int input) throws NeedResetException {
+    private boolean callCommand(String input) throws NeedResetException {
         switch (input) {
-            case 0:
+            case "exit":
                 System.out.print("Confirm exit by typing y:");
                 byte[] confirm = readLine(1);
                 if (confirm == null || confirm.length != 1 || confirm[0] != 121) {
-                    System.out.print("Cancelling exit...");
+                    System.out.println("Cancelling exit...");
                     return true;
                 }
                 System.exit(0);
-            case 1:
+            case "help":
                 return showLegend();
-            case 2:
+            case "verify":
                 return apdu.verifyPin();
-            case 3:
+            case "status":
                 return apdu.showStatus();
-            case 4:
+            case "list":
                 return apdu.listNames();
-            case 5:
+            case "store":
                 return apdu.storeSecret();
-            case 6:
+            case "show":
                 return apdu.showSecret(false);
-            case 7:
+            case "bytes":
                 return apdu.showSecret(true);
-            case 8:
+            case "remove":
                 return apdu.removeSecret();
-            case 9:
+            case "unblock":
                 return apdu.unblockPin();
-            case 10:
+            case "newPIN":
                 return apdu.changePin(Const.CHANGE_PIN);
-            case 11:
+            case "newPUK":
                 return apdu.changePin(Const.CHANGE_PUK);
-            case 12:
+            case "newPS":
                 if (!apdu.changePin(Const.CHANGE_PAIRING_SECRET)) {
                     return false;
                 }
                 throw new NeedResetException();
-            case 13:
+            case "unpair":
                 if (!apdu.unpair()) {
                     return false;
                 }
                 throw new NeedResetException(true);
-            case 14:
+            case "reset":
                 sc.reset();
                 throw new NeedResetException();
             default:
-                System.err.println("Invalid command!");
+                System.out.println("Invalid command!");
                 return false;
         }
     }
 
-
+    private boolean showLegend() {
+        System.out.println("[exit] to stop the program");
+        System.out.println("[help] to show this menu");
+        System.out.println("[status] to get current state of the card");
+        System.out.println("[reset] to reset SC");
+        System.out.println("[list] to list secrets");
+        if (sc.isPermanentlyBlocked()) {
+            System.out.println("Card is blocked, other commands unavailable");
+        } else if (sc.isPinBlocked()) {
+            System.out.println("[unblock] to unblock PIN");
+        } else if (!sc.isPinVerified()) {
+            System.out.println("[verify] to verify PIN");
+        } else {
+            System.out.println("[store] to save secret to the card.");
+            System.out.println("[show] writes specific secret in UTF8 format");
+            System.out.println("[bytes] writes specific secret in byte array format");
+            System.out.println("[remove] to delete secret from the card");
+            System.out.println("[newPIN] to change PIN");
+            System.out.println("[newPUK] to change PUK");
+            System.out.println("[newPS] to change pairing secret (resets SC)");
+            System.out.println("[unpair] to remove pairing secret from the card (resets SC)");
+        }
+        return true;
+    }
 
     public static byte[] getPin() {
         System.out.print("Enter PIN:");
@@ -129,28 +152,7 @@ public class UserInterface {
         }
         return pin;
     }
-    private boolean showLegend() {
-        System.out.println("Type 0 to exit");
-        System.out.println("Type 1 to show this menu");
-        System.out.println("Type 2 to verify PIN");
-        System.out.println("Type 3 to show status");
-        System.out.println("Type 4 to list secrets");
 
-        if (sc.isPinVerified()) {
-            System.out.println("Type 5 to store secret");
-            System.out.println("Type 6 to show specific secret in UTF8");
-            System.out.println("Type 7 to show specific secret in byte array");
-            System.out.println("Type 8 to remove secret");
-            System.out.println("Type 9 to unblock PIN");
-            System.out.println("Type 10 to change PIN");
-            System.out.println("Type 11 to change PUK");
-            System.out.println("Type 12 to change pairing secret (resets SC)");
-            System.out.println("Type 13 to remove pairing secret (resets SC)");
-            System.out.println("Type 14 to reset SC");
-        }
-
-        return true;
-    }
     public static byte[] getPuk() {
         System.out.print("Enter PUK:");
         byte[] puk = readLine(Const.PUK_LENGTH);
@@ -231,7 +233,12 @@ public class UserInterface {
             input = reader.readLine();
             reader.close();
         } catch (IOException e) {
-            throw new RuntimeException("Unable to retrieve PS!");
+            System.out.println("Unable to retrieve PS from file!");
+            System.out.print("Input PS manually:");
+            input = Arrays.toString(readLine(Const.PS_LEN));
+        }
+        if (input.length() != Const.PS_LEN) {
+            throw new RuntimeException("Invalid PS length!");
         }
         byte[] base = Base64.getDecoder().decode(input);
         System.arraycopy(base, 0, ps, 0, Const.SC_SECRET_LENGTH);

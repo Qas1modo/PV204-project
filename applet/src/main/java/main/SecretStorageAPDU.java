@@ -24,11 +24,11 @@ public class SecretStorageAPDU {
             return false;
         }
         if (pinIsNotBlocked && sc.isPinBlocked()) {
-            System.out.println("Operation not permitted! (PIN is locked)");
+            System.out.println("Operation not permitted! (PIN is blocked)");
             return false;
         }
         if (pinIsBlocked && !sc.isPinBlocked()) {
-            System.out.println("Operation not permitted! (PIN is not locked)");
+            System.out.println("Operation not permitted! (PIN is not blocked)");
             return false;
         }
         return true;
@@ -168,7 +168,7 @@ public class SecretStorageAPDU {
     }
 
     public boolean listNames() {
-        if (!checkPrerequisites(true, false, false, true)) {
+        if (!checkPrerequisites(true, false, false, false)) {
             return false;
         }
         byte nextPage = 0;
@@ -237,12 +237,12 @@ public class SecretStorageAPDU {
             return false;
         }
         System.out.println("Current status of JavaCard");
-        System.out.printf("Pin validated: %b%n", data[0] == 0x01);
+        System.out.printf("Pin verified: %b%n", data[0] == 0x01);
         System.out.printf("Pin remaining tries: %d%n", data[1]);
         System.out.printf("Puk remaining tries: %d%n", data[2]);
         System.out.printf("Opened secure channel: %b%n", data[3] == 0x01);
         System.out.printf("Phase 1 verified: %b%n", data[4] == 0x01);
-        System.out.printf("Verified: %b%n", data[5] == 0x01);
+        System.out.printf("Secure channel verified: %b%n", data[5] == 0x01);
         System.out.printf("Number of stored secrets: %d/%d%n", data[6], data[7]);
         return true;
     }
@@ -257,12 +257,12 @@ public class SecretStorageAPDU {
                 (byte)0x00, (byte)0x00);
         if (response.getSW1() == 0x63) {
             sc.pinVerified(false);
-            System.err.printf("Provided incorrect PIN, need to sign again with %x attempts!%n",
+            System.out.printf("Provided incorrect PIN, need to sign again with %x attempts!%n",
                     response.getSW2() - 0xc0);
             return false;
         }
         if ((short) response.getSW() != ISO7816.SW_NO_ERROR) {
-            System.err.println("Unpairing cannot be performed!");
+            System.out.println("Unpairing cannot be performed!");
             return false;
         }
         sc.reset();
@@ -323,7 +323,7 @@ public class SecretStorageAPDU {
             return false;
         }
         if (sc.isPermanentlyBlocked()) {
-            System.out.println("Card blocked!");
+            System.out.println("Card blocked permanently!");
             return false;
         }
         byte[] request;
