@@ -48,9 +48,9 @@ public class UserInterface {
                 callCommand(new String(command));
             } catch (NeedResetException e){
                 if (e.pairingRemoved) {
-                    System.out.print("Successfully unpaired, pair again ? (type 0 to exit):");
+                    System.out.print("Successfully unpaired, pair again ? (type n to exit):");
                     command = readLine(1);
-                    if (command != null && command.length == 1 && command[0] == 48) {
+                    if (command != null && command.length == 1 && command[0] == 110) {
                         System.out.println("Exiting...");
                         return false;
                     }
@@ -60,7 +60,7 @@ public class UserInterface {
                 System.out.println("Command did not finish successfully!");
             }
         }
-        System.out.println("Secure channel destroyed, proceeding to reinitialization!");
+        System.out.println("Secure channel destroyed, proceeding to establishment!");
         apdu.selectApp(false);
         return true;
     }
@@ -208,6 +208,9 @@ public class UserInterface {
 
     public static String outputPS(byte[] buffer, int off, int len) {
          String output = Base64.getEncoder().encodeToString(Arrays.copyOfRange(buffer, off, off+len));
+         if (Run.inSimulator) {
+             return output;
+         }
          File file = new File(FILENAME);
          try {
              if (!file.exists() && !file.createNewFile()) {
